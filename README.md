@@ -22,9 +22,9 @@ nnU-Net 系の学習済みモデルを WebGPU のコンピュートシェーダ�
 
 ### オフラインで使う（HTML 1 枚）
 
-[Releases](https://github.com/ainem-m/ct-segment-webgpu/releases) の `ct-segment-webgpu.html`（約 68 MB）は、
-モデルを埋め込んだ 1 ファイル版です。ダウンロードしてダブルクリックで開けば、通信なしで動きます。
-自分で作る場合は `python3 tools/build_single_html.py` を実行します（`dist/` に出力）。
+Web 版の右上にある **「オフライン版を保存」** を押すと、モデルを埋め込んだ HTML 1 枚（`ct-segment-webgpu.html`、約 68 MB）を保存できます。
+ダブルクリックで開けば、通信なしで動きます。
+clone したリポジトリから作る場合は `python3 tools/build_single_html.py` を実行します（`dist/` に出力）。
 
 ### ローカルサーバーで使う
 

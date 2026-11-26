@@ -98,6 +98,7 @@ section.viewer { background: var(--view); display: grid; grid-template-columns: 
   <span class="sub" id="model-sub">モデルを読み込み中…</span>
   <span class="spacer"></span>
   <span class="gpu" id="gpu-status">WebGPU を確認中…</span>
+  <button class="btn small" id="save-offline" hidden title="モデルを埋め込んだ HTML 1 枚を保存します。ダブルクリックで開けば通信なしで動きます。">オフライン版を保存</button>
   <span class="badge">研究・教育用 · 医療機器ではありません</span>
 </header>
 <main class="layout">
@@ -259,6 +260,34 @@ async function embeddedShard(key) {
   }
   el.remove(); // free the text
   return bytes;
+}
+
+function bytesToBase64(u8) {
+  if (u8.toBase64) return u8.toBase64();
+  let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+// Same output as tools/build_single_html.py, built in the browser from this page's own
+// source and the model that is already loaded.
+async function buildOfflineHTML(pkg, registry) {
+  const src = await (await fetch(location.href.split('#')[0])).text();
+  const marker = '<script type=' + '"module">'; // split so this source holds the tag only once
+  if (src.split(marker).length !== 2) throw new Error('page source not recognised');
+  const m = pkg.manifest; const blocks = []; let off = 0;
+  const bytes = new Uint8Array(pkg.f16.buffer, pkg.f16.byteOffset, m.weights.bytes);
+  for (const shard of m.weights.shards) {
+    const raw = bytes.subarray(off, off + shard.bytes); off += shard.bytes;
+    const n = raw.length >> 1, shuf = new Uint8Array(raw.length);
+    for (let i = 0; i < n; i++) { shuf[i] = raw[2 * i + 1]; shuf[n + i] = raw[2 * i]; }
+    const z = new Uint8Array(await new Response(new Blob([shuf]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+    const b64 = bytesToBase64(z).replace(/.{1024}/g, '$&\n');
+    blocks.push(`<script type="text/plain" data-shard="${m.id}/${shard.file}" data-encoding="base64+deflate+shuffle2">\n${b64}\n<\/script>`);
+  }
+  const reg = { ...registry, models: registry.models.filter((x) => x.id === m.id) };
+  const json = JSON.stringify({ registry: reg, models: { [m.id]: m } }).replace(/<\//g, '<\\/');
+  const payload = `<script type="application/json" id="embedded-models">${json}<\/script>\n${blocks.join('\n')}\n`;
+  return new Blob([src.replace(marker, () => payload + marker)], { type: 'text/html' });
 }
 
 async function loadScript(url) {
@@ -2137,7 +2166,7 @@ async function initApp() {
     $('consent-ok').onclick = () => { try { localStorage.setItem('ctseg-consent', '1'); } catch (e) { /* ignore */ } $('consent').hidden = true; };
   }
   state.views = new SliceViews($('viewer'), () => {});
-  wireOpen(); wireRun(); wireResult();
+  wireOpen(); wireRun(); wireResult(); wireOffline();
   try {
     state.gpu = await initGPU();
     $('gpu-status').innerHTML = `WebGPU <b>${esc(state.gpu.adapterName || 'GPU')}</b> · ${state.gpu.f16 ? 'fp16' : 'fp32'}`;
@@ -2164,6 +2193,7 @@ async function loadModel(id) {
   $('model-sub').textContent = `${m.name} · ${m.labels.length - 1} クラス`;
   const pp = m.postprocess?.removeSmallIslands; if (pp) $('opt-islands').value = pp.minimumVoxels;
   renderAbout(m);
+  $('save-offline').hidden = !!EMBEDDED || location.protocol === 'file:';
   if (state.volume) await prepareGrid();
   updateRunButton();
 }
@@ -2397,6 +2427,18 @@ async function buildMeshes() {
 }
 
 // ---------------------------------------------------------------- export
+function wireOffline() {
+  $('save-offline').onclick = async () => {
+    const b = $('save-offline'); const label = b.textContent;
+    if (!state.pkg) return;
+    b.disabled = true; b.textContent = 'オフライン版を作成中…';
+    try { download(await buildOfflineHTML(state.pkg, state.registry), 'ct-segment-webgpu.html'); }
+    catch (e) { console.error(e); alertInline('オフライン版を作れませんでした: ' + (e.message || e)); }
+    b.disabled = false; b.textContent = label;
+  };
+}
+function alertInline(msg) { $('model-sub').innerHTML = `<span class="err">${esc(msg)}</span>`; }
+
 function wireResult() {
   $('overlay').oninput = (e) => state.views.setAlpha(parseFloat(e.target.value));
   $('save-stl-all').onclick = async () => {
