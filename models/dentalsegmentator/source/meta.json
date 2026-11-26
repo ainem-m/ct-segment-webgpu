@@ -1,0 +1,24 @@
+{
+ "name": "DentalSegmentator",
+ "version": "Dataset111_453CT v1.0.0-alpha (fold 0, 3d_fullres)",
+ "labels": [
+  {"value": 0, "key": "background", "ja": "背景", "color": [0, 0, 0]},
+  {"value": 1, "key": "upper_skull", "ja": "上顎・頭蓋骨", "color": [232, 196, 140]},
+  {"value": 2, "key": "mandible", "ja": "下顎骨", "color": [214, 120, 92]},
+  {"value": 3, "key": "upper_teeth", "ja": "上顎歯", "color": [120, 200, 255]},
+  {"value": 4, "key": "lower_teeth", "ja": "下顎歯", "color": [130, 230, 160]},
+  {"value": 5, "key": "mandibular_canal", "ja": "下顎管", "color": [255, 220, 60]}
+ ],
+ "postprocess": {
+  "removeSmallIslands": {"classes": [1, 2, 3, 4], "connectivity": 6, "minimumVoxels": 1000}
+ },
+ "attribution": {
+  "model": "DentalSegmentator pretrained model by Gauthier Dot et al., CC BY 4.0",
+  "modelUrl": "https://doi.org/10.5281/zenodo.10829675",
+  "paper": "Dot G. et al. DentalSegmentator: robust open source deep learning-based CT and CBCT image segmentation. Journal of Dentistry (2024). https://doi.org/10.1016/j.jdent.2024.105130",
+  "framework": "nnU-Net: Isensee F. et al. Nature Methods (2021). https://doi.org/10.1038/s41592-020-01008-z",
+  "license": "https://creativecommons.org/licenses/by/4.0/",
+  "changes": "Weights converted from PyTorch float32 to float16 for WebGPU. Preprocessing parameters from the Slicer DentalSegmentator Dataset111_453CT v1.0.0-alpha release, whose checkpoint is byte-identical to the Zenodo Dataset112 archive.",
+  "notEndorsed": "The original authors do not endorse this application."
+ }
+}

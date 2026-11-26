@@ -1,0 +1,35 @@
+CT Segment WebGPU
+Copyright 2026 the CT Segment WebGPU contributors
+
+The source code in this repository (index.html, tools/, serve.command) is licensed
+under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party material
+--------------------
+
+models/dentalsegmentator/ (weights.*.bin, model.json, model.js, source/)
+  DentalSegmentator pretrained model
+  Gauthier Dot et al. Zenodo record 10829675, https://doi.org/10.5281/zenodo.10829675
+  Dot G. et al. DentalSegmentator: robust open source deep learning-based CT and
+  CBCT image segmentation. Journal of Dentistry (2024).
+  https://doi.org/10.1016/j.jdent.2024.105130
+  License: Creative Commons Attribution 4.0 International (CC BY 4.0),
+  https://creativecommons.org/licenses/by/4.0/
+  Changes: the published PyTorch float32 checkpoint (SHA-256
+  a3a91ae0f8d7ab403d8662e47d2f0bdf7fc51e7783b46632841274dff8266c32) was converted
+  to float16 shards; the learned values were not otherwise modified. The
+  preprocessing parameters (source/plans.json, source/dataset.json) are those of
+  the SlicerDentalSegmentator Dataset111_453CT v1.0.0-alpha release
+  (https://github.com/gaudot/SlicerDentalSegmentator), whose checkpoint is
+  byte-identical to the one in the Zenodo archive.
+  The original authors do not endorse this application.
+
+nnU-Net (method; no code is included)
+  Isensee F. et al. nnU-Net: a self-configuring method for deep learning-based
+  biomedical image segmentation. Nature Methods (2021).
+  https://doi.org/10.1038/s41592-020-01008-z
+
+Disclaimer
+----------
+This software is provided for research, education and technical evaluation only.
+It is not a medical device and must not be used for diagnosis or treatment.

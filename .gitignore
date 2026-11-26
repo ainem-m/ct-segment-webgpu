@@ -1,0 +1,11 @@
+# single-file build output (tools/build_single_html.py)
+dist/
+# base64 weight shards for file:// pages (regenerate with the converter without --no-js)
+models/*/weights.*.js
+# local regression data
+tests/golden/*.f32
+tests/golden/*.part*
+tests/golden/*.u8
+debug/
+__pycache__/
+.DS_Store

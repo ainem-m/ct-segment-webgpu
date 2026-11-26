@@ -1,0 +1,2437 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CT Segment WebGPU — DentalSegmentator</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --ink: #1b1e22; --muted: #5d636b; --line: #dcd9d2; --panel: #f7f6f2; --card: #ffffff;
+  --accent: #0d6e72; --accent-ink: #ffffff; --accent-soft: #dcefee; --warn: #8a5a00; --warn-soft: #fff4d6;
+  --bad: #a3271f; --view: #0c0e10; --view-line: #23272c; --view-ink: #cfd5dc;
+  font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, -apple-system, sans-serif;
+  color: var(--ink); background: var(--panel); font-size: 14px; line-height: 1.5;
+}
+* { box-sizing: border-box; min-width: 0; }
+[hidden] { display: none !important; }
+body { margin: 0; height: 100vh; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+button, select, input { font: inherit; color: inherit; }
+header.top { display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--card); }
+header.top h1 { font-size: 16px; margin: 0; font-weight: 700; letter-spacing: 0.01em; }
+header.top .sub { color: var(--muted); font-size: 13px; }
+header.top .spacer { flex: 1; }
+.badge { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); white-space: nowrap; }
+.gpu { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.gpu b { color: var(--ink); font-weight: 600; }
+main.layout { display: grid; grid-template-columns: 372px 1fr; min-height: 0; }
+aside.panel { overflow-y: auto; border-right: 1px solid var(--line); padding: 14px 14px 28px; display: flex; flex-direction: column; gap: 12px; }
+.step { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.step h2 { font-size: 14px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+.step h2 .n { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: inline-grid; place-items: center; font-size: 12px; flex: none; }
+.step.disabled { opacity: 0.55; }
+.step.disabled .n { background: #9aa0a6; }
+.drop { border: 1.5px dashed #b9b5ab; border-radius: 8px; padding: 16px 12px; text-align: center; color: var(--muted); transition: background 0.15s, border-color 0.15s; }
+.drop.over { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+.drop p { margin: 0 0 10px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--card); border-radius: 7px; padding: 7px 12px; cursor: pointer; min-height: 36px; }
+.btn:hover { border-color: #a9a59c; }
+.btn:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn.small { min-height: 30px; padding: 4px 10px; font-size: 13px; }
+.btn.wide { width: 100%; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.err { color: var(--bad); white-space: pre-wrap; }
+.warnbox { background: var(--warn-soft); color: var(--warn); border-radius: 7px; padding: 8px 10px; font-size: 12.5px; }
+.series { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; max-height: 220px; overflow-y: auto; }
+.series label { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 7px; cursor: pointer; }
+.series label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.series .meta { font-size: 12px; color: var(--muted); }
+dl.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 10px 0 0; font-size: 12.5px; }
+dl.kv dt { color: var(--muted); } dl.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+.progress { height: 8px; background: #e7e4dd; border-radius: 99px; overflow: hidden; margin: 10px 0 6px; }
+.progress > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.25s; }
+.stage { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1.5em; }
+details.opts { margin-top: 10px; font-size: 13px; }
+details.opts summary { cursor: pointer; color: var(--muted); }
+details.opts .grid { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; margin-top: 8px; }
+details.opts input[type=number] { width: 90px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; }
+select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); min-height: 34px; }
+table.labels { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.labels td { padding: 5px 4px; border-bottom: 1px solid #ece9e3; }
+table.labels td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; vertical-align: -2px; margin-right: 6px; border: 1px solid rgba(0, 0, 0, 0.15); }
+.about { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.about a { color: var(--accent); }
+section.viewer { background: var(--view); display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; min-height: 0; position: relative; }
+.vp { position: relative; background: #000; overflow: hidden; min-height: 0; }
+.vp canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.vp .tag { position: absolute; left: 8px; top: 6px; font-size: 12px; color: var(--view-ink); pointer-events: none; text-shadow: 0 1px 2px #000; }
+.vp .tag b { font-weight: 600; }
+.vp .hint { position: absolute; left: 8px; bottom: 6px; font-size: 11px; color: #8d96a0; pointer-events: none; }
+.vp .dir { position: absolute; font-size: 11px; color: #8d96a0; pointer-events: none; }
+.vp .dir.l { left: 6px; top: 50%; } .vp .dir.r { right: 6px; top: 50%; } .vp .dir.t { top: 22px; left: 50%; } .vp .dir.b { bottom: 4px; left: 50%; }
+.toolbar { position: absolute; right: 8px; top: 6px; display: flex; gap: 4px; }
+.toolbar button { background: rgba(30, 34, 39, 0.85); color: var(--view-ink); border: 1px solid var(--view-line); border-radius: 6px; font-size: 12px; padding: 3px 8px; cursor: pointer; }
+.toolbar button.on { border-color: #4fb3b6; color: #fff; }
+.empty { position: absolute; inset: 0; display: grid; place-items: center; color: #6b737c; font-size: 13px; text-align: center; padding: 20px; }
+.modal { position: fixed; inset: 0; background: rgba(12, 14, 16, 0.55); display: grid; place-items: center; z-index: 10; }
+.modal .box { background: var(--card); border-radius: 12px; max-width: 560px; width: calc(100% - 32px); padding: 22px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
+.modal h3 { margin: 0 0 10px; font-size: 17px; }
+.modal ul { padding-left: 20px; margin: 8px 0 16px; }
+.modal li { margin-bottom: 6px; }
+@media (max-width: 900px) {
+  body { height: auto; overflow: auto; }
+  main.layout { grid-template-columns: 1fr; }
+  aside.panel { border-right: 0; overflow: visible; }
+  section.viewer { min-height: 90vh; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>CT Segment WebGPU</h1>
+  <span class="sub" id="model-sub">モデルを読み込み中…</span>
+  <span class="spacer"></span>
+  <span class="gpu" id="gpu-status">WebGPU を確認中…</span>
+  <span class="badge">研究・教育用 · 医療機器ではありません</span>
+</header>
+<main class="layout">
+  <aside class="panel">
+    <section class="step" id="step-open">
+      <h2><span class="n">1</span>CT を開く</h2>
+      <div class="drop" id="drop">
+        <p>DICOM フォルダ、または NIfTI（.nii / .nii.gz）をここにドロップ</p>
+        <div class="row" style="justify-content:center">
+          <button class="btn" id="pick-folder">フォルダを選ぶ</button>
+          <button class="btn" id="pick-file">ファイルを選ぶ</button>
+        </div>
+        <input type="file" id="folder-input" webkitdirectory multiple hidden>
+        <input type="file" id="file-input" multiple hidden accept=".nii,.gz,.dcm,application/dicom">
+      </div>
+      <div class="series" id="series-list" hidden></div>
+      <div class="row" id="series-actions" hidden style="margin-top:8px"><button class="btn primary small" id="load-series">このシリーズを読み込む</button></div>
+      <div class="stage" id="open-stage"></div>
+      <dl class="kv" id="vol-info" hidden></dl>
+      <div class="warnbox" id="vol-warn" hidden></div>
+    </section>
+
+    <section class="step disabled" id="step-run">
+      <h2><span class="n">2</span>セグメンテーション</h2>
+      <div class="row">
+        <select id="model-select" aria-label="モデル" style="flex:1"></select>
+      </div>
+      <details class="opts">
+        <summary>詳細設定</summary>
+        <div class="grid">
+          <label for="opt-scale">処理解像度（モデル間隔の倍率）</label>
+          <select id="opt-scale"><option value="1">1.0（標準）</option><option value="1.25">1.25（軽量）</option><option value="1.5">1.5（さらに軽量）</option></select>
+          <label for="opt-step">タイルの重なり</label>
+          <select id="opt-step"><option value="0.5">50%（標準）</option><option value="0.75">25%（速い）</option></select>
+          <label for="opt-islands">小さな島の除去（ボクセル未満）</label>
+          <input type="number" id="opt-islands" min="0" step="100" value="1000">
+          <label for="opt-smooth">表面のスムージング（Taubin 回数）</label>
+          <input type="number" id="opt-smooth" min="0" max="60" step="5" value="10">
+          <label for="opt-subvoxel">サブボクセル境界</label>
+          <input type="checkbox" id="opt-subvoxel" checked>
+        </div>
+      </details>
+      <div class="dl kv small muted" id="run-estimate" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary" id="run" disabled style="flex:1">セグメンテーションを実行</button>
+        <button class="btn" id="cancel" hidden>中止</button>
+      </div>
+      <div class="progress"><i id="bar"></i></div>
+      <div class="stage" id="run-stage"></div>
+    </section>
+
+    <section class="step disabled" id="step-result">
+      <h2><span class="n">3</span>結果と書き出し</h2>
+      <table class="labels" id="label-table"></table>
+      <div class="row" style="margin-top:10px">
+        <label class="small muted" for="overlay">重ね表示</label>
+        <input type="range" id="overlay" min="0" max="1" step="0.05" value="0.45" style="flex:1">
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label class="small muted" for="coords">STL 座標系</label>
+        <select id="coords"><option value="LPS">LPS（DICOM / Slicer 既定）</option><option value="RAS">RAS</option></select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary small" id="save-stl-all" disabled>STL をすべて保存</button>
+        <button class="btn small" id="save-nifti" disabled>ラベル NIfTI</button>
+        <button class="btn small" id="save-report" disabled>処理記録 JSON</button>
+      </div>
+      <div class="stage" id="result-stage"></div>
+    </section>
+
+    <section class="about" id="about"></section>
+  </aside>
+
+  <section class="viewer" id="viewer">
+    <div class="vp" id="vp-axial"><canvas></canvas><span class="tag"><b>Axial</b> <span class="si"></span></span><span class="dir l">R</span><span class="dir r">L</span><span class="dir t">A</span><span class="dir b">P</span>
+      <div class="toolbar" id="wl-bar"><button data-wl="bone" class="on">骨</button><button data-wl="soft">軟組織</button><button data-wl="wide">広域</button></div></div>
+    <div class="vp" id="vp-coronal"><canvas></canvas><span class="tag"><b>Coronal</b> <span class="si"></span></span><span class="dir l">R</span><span class="dir r">L</span><span class="dir t">S</span><span class="dir b">I</span></div>
+    <div class="vp" id="vp-sagittal"><canvas></canvas><span class="tag"><b>Sagittal</b> <span class="si"></span></span><span class="dir l">A</span><span class="dir r">P</span><span class="dir t">S</span><span class="dir b">I</span></div>
+    <div class="vp" id="vp-3d"><canvas></canvas><span class="tag"><b>3D</b></span><span class="hint">ドラッグで回転 · ホイールで拡大 · ダブルクリックで正面</span>
+      <div class="toolbar"><button data-view="front">正面</button><button data-view="right">右</button><button data-view="left">左</button><button data-view="top">上</button></div></div>
+    <div class="empty" id="viewer-empty">CT を開くとここに 3 断面と 3D が表示されます</div>
+  </section>
+</main>
+
+<div class="modal" id="consent" hidden>
+  <div class="box">
+    <h3>ご利用の前に</h3>
+    <ul>
+      <li>本ツールは研究・教育・技術評価のためのものです。医療機器ではなく、結果を診断・治療に使うことはできません。</li>
+      <li>CT と結果はこのコンピューターのブラウザ内だけで処理されます。データはどこにも送信されません。</li>
+      <li>セグメンテーションには DentalSegmentator の学習済みモデル（Dot et al., CC BY 4.0）を使います。原著者はこのツールを推奨・保証していません。</li>
+      <li>出力の正確さは保証されません。必ず目視で確認してください。</li>
+    </ul>
+    <div class="row" style="justify-content:flex-end"><button class="btn primary" id="consent-ok">同意して使う</button></div>
+  </div>
+</div>
+<script type="module">
+'use strict';
+/* ==========================================================================
+   CT Segment WebGPU
+   Local, in-browser CT segmentation with nnU-Net models on WebGPU.
+   Research / education use only. Not a medical device.
+   ========================================================================== */
+
+// ---------------------------------------------------------------- utilities
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+const fmtBytes = (n) => n >= 2 ** 30 ? (n / 2 ** 30).toFixed(2) + ' GB' : (n / 2 ** 20).toFixed(1) + ' MB';
+const fmtSec = (s) => s >= 90 ? `${Math.floor(s / 60)}分${Math.round(s % 60)}秒` : `${s.toFixed(1)}秒`;
+const ceilDiv = (a, b) => Math.floor((a + b - 1) / b);
+class Cancelled extends Error { constructor() { super('cancelled'); this.name = 'Cancelled'; } }
+class UserError extends Error { constructor(code, msg) { super(msg); this.code = code; this.name = 'UserError'; } }
+
+const F16_TO_F32 = (() => {
+  const t = new Float32Array(65536);
+  for (let h = 0; h < 65536; h++) {
+    const s = h & 0x8000 ? -1 : 1, e = (h >> 10) & 0x1f, f = h & 0x3ff;
+    t[h] = e === 0 ? s * f * 2 ** -24 : e === 31 ? (f ? NaN : s * Infinity) : s * (1 + f / 1024) * 2 ** (e - 15);
+  }
+  return t;
+})();
+const F32_TO_F16 = (() => {
+  const f32 = new Float32Array(1), u32 = new Uint32Array(f32.buffer);
+  return (v) => {
+    f32[0] = v; const x = u32[0];
+    const s = (x >>> 16) & 0x8000; let e = ((x >>> 23) & 0xff) - 127 + 15; let m = x & 0x7fffff;
+    if (e >= 31) return s | 0x7c00 | (((x >>> 23) & 0xff) === 255 && m ? 0x200 : 0);
+    if (e <= 0) { if (e < -10) return s; m = (m | 0x800000) >> (1 - e); return s | ((m + 0x1000) >> 13); }
+    const r = s | (e << 10) | (m >> 13); return (m & 0x1fff) > 0x1000 || ((m & 0x1fff) === 0x1000 && (r & 1)) ? r + 1 : r;
+  };
+})();
+
+// ------------------------------------------------------------- model package
+// models/registry.json lists available models; each model folder holds model.json
+// (architecture + preprocessing + labels) and float16 weight shards. Pages served
+// over http(s) fetch the .bin shards; pages opened from file:// load the same bytes
+// from the base64 .js shards, so the model still loads automatically.
+const MODEL_ROOT = new URL('./models/', location.href);
+
+// Single-file build (tools/build_single_html.py): registry, model.json and weight
+// shards are embedded in this page, so nothing is fetched at all.
+const EMBEDDED = (() => { const el = document.getElementById('embedded-models'); return el ? JSON.parse(el.textContent) : null; })();
+
+async function base64ToBytes(b64) {
+  if (Uint8Array.fromBase64) return Uint8Array.fromBase64(b64);
+  return new Uint8Array(await (await fetch('data:application/octet-stream;base64,' + b64)).arrayBuffer());
+}
+
+async function embeddedShard(key) {
+  const el = document.querySelector(`script[data-shard="${key}"]`);
+  if (!el) return null;
+  let bytes = await base64ToBytes(el.textContent.trim());
+  const enc = (el.dataset.encoding || '').split('+');
+  if (enc.includes('deflate')) bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer());
+  if (enc.includes('shuffle2')) { // [high bytes][low bytes] -> little-endian 16-bit words
+    const n = bytes.length >> 1, out = new Uint8Array(bytes.length);
+    for (let i = 0; i < n; i++) { out[2 * i + 1] = bytes[i]; out[2 * i] = bytes[n + i]; }
+    bytes = out;
+  }
+  el.remove(); // free the text
+  return bytes;
+}
+
+async function loadScript(url) {
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url; s.onload = resolve; s.onerror = () => reject(new Error('script load failed: ' + url));
+    document.head.appendChild(s);
+  });
+}
+
+async function fetchJSONorScript(url) {
+  try {
+    if (location.protocol === 'file:') throw new Error('file:// cannot fetch');
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch (e) {
+    // file:// fallback: registry.js / model.js define the same JSON on window.
+    const jsUrl = url.toString().replace(/\.json$/, '.js');
+    self.__nnunetWebJSON = self.__nnunetWebJSON || {};
+    await loadScript(jsUrl);
+    const key = Object.keys(self.__nnunetWebJSON).find((k) => jsUrl.endsWith(k));
+    if (!key) throw new Error('JSON not found in ' + jsUrl);
+    return self.__nnunetWebJSON[key];
+  }
+}
+
+async function sha256Hex(buf) {
+  if (!crypto.subtle) return null;
+  const d = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function b64ToBytes(b64) {
+  if (Uint8Array.fromBase64) return Uint8Array.fromBase64(b64);
+  const bin = atob(b64); const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function loadModelPackage(modelId, onProgress = () => {}) {
+  const base = new URL(modelId + '/', MODEL_ROOT);
+  const manifest = EMBEDDED?.models?.[modelId] ?? await fetchJSONorScript(new URL('model.json', base));
+  if (manifest.format !== 'nnunet-webgpu-v1') throw new Error('unknown model format ' + manifest.format);
+  const total = manifest.weights.bytes;
+  const blob = new Uint8Array(total);
+  let offset = 0;
+  for (const shard of manifest.weights.shards) {
+    let bytes = EMBEDDED ? await embeddedShard(manifest.id + '/' + shard.file) : null;
+    if (!bytes && location.protocol !== 'file:') {
+      try {
+        const r = await fetch(new URL(shard.file, base));
+        if (!r.ok) throw new Error(r.status);
+        const reader = r.body.getReader(); const parts = []; let got = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parts.push(value); got += value.length; onProgress((offset + got) / total);
+        }
+        bytes = new Uint8Array(got); let o = 0; for (const p of parts) { bytes.set(p, o); o += p.length; }
+      } catch (e) { bytes = null; }
+    }
+    if (!bytes) {
+      if (!shard.script) throw new Error('weights not reachable: ' + shard.file);
+      self.__nnunetWebShards = self.__nnunetWebShards || {};
+      try { await loadScript(new URL(shard.script, base)); }
+      catch (e) { throw new UserError('WEIGHTS_UNREACHABLE', 'このフォルダには file:// 用の重みがありません。モデル埋め込み版（ct-segment-webgpu.html）を開くか、ローカルサーバー経由で開いてください。'); }
+      const key = manifest.id + '/' + shard.file;
+      bytes = b64ToBytes(self.__nnunetWebShards[key]);
+      delete self.__nnunetWebShards[key];
+    }
+    if (bytes.length !== shard.bytes) throw new Error('shard size mismatch ' + shard.file);
+    const digest = await sha256Hex(bytes);
+    if (digest && digest !== shard.sha256) throw new Error('shard checksum mismatch ' + shard.file);
+    blob.set(bytes, offset); offset += bytes.length; onProgress(offset / total);
+  }
+  return { manifest, f16: new Uint16Array(blob.buffer, 0, total >> 1) };
+}
+
+function getTensor(pkg, name) {
+  const t = pkg.manifest.weights.tensors[name];
+  if (!t) throw new Error('missing tensor ' + name);
+  return { shape: t.shape, data: pkg.f16.subarray(t.offset >> 1, (t.offset >> 1) + t.count) };
+}
+
+// ------------------------------------------------------------- WebGPU engine
+async function initGPU() {
+  if (!navigator.gpu) throw new UserError('NO_WEBGPU', 'このブラウザは WebGPU に対応していません。最新の Chrome / Edge を使ってください。');
+  const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+  if (!adapter) throw new UserError('NO_ADAPTER', 'WebGPU のアダプタを取得できませんでした。');
+  const want = ['maxStorageBufferBindingSize', 'maxBufferSize', 'maxComputeWorkgroupStorageSize',
+    'maxStorageBuffersPerShaderStage', 'maxComputeInvocationsPerWorkgroup'];
+  const requiredLimits = {};
+  for (const k of want) requiredLimits[k] = adapter.limits[k];
+  const forceF32 = new URLSearchParams(location.search).has('f32');
+  const f16 = adapter.features.has('shader-f16') && !forceF32;
+  const device = await adapter.requestDevice({ requiredLimits, requiredFeatures: f16 ? ['shader-f16'] : [] });
+  const info = adapter.info || {};
+  device.lost.then((e) => console.error('WebGPU device lost', e.message));
+  return { device, f16, limits: device.limits, adapterName: [info.vendor, info.architecture, info.description].filter(Boolean).join(' ') };
+}
+
+const WG_HEADER = (f16) => (f16 ? 'enable f16;\nalias ACT = f16;\nalias WT = f16;\n' : 'alias ACT = f32;\nalias WT = f32;\n');
+
+// 3x3x3 convolution (padding 1) as an implicit GEMM. Each workgroup computes an
+// output tile TD x TH x TW for COT output channels; each thread owns 4 voxels along
+// W and 8 output channels. Inputs come from up to two tensors (decoder concat) and
+// each input applies its pending InstanceNorm affine + LeakyReLU on load.
+function wgslConv(f16, t) {
+  const { TD, TH, TW, COT, SD, SH, SW, CK } = t;
+  const ID = (TD - 1) * SD + 3, IH = (TH - 1) * SH + 3, IW = (TW - 1) * SW + 3;
+  const NV = (TD * TH * TW) / 4, NT = NV * (COT / 8), TILE = ID * IH * IW;
+  return WG_HEADER(f16) + `
+struct P { inD: u32, inH: u32, inW: u32, c4a: u32, c4b: u32, outD: u32, outH: u32, outW: u32,
+  cout4: u32, tilesD: u32, tilesH: u32, tilesW: u32, coutTiles: u32, wgX: u32, slopeA: f32, slopeB: f32 };
+@group(0) @binding(0) var<uniform> p: P;
+@group(0) @binding(1) var<storage, read> inA: array<vec4<ACT>>;
+@group(0) @binding(2) var<storage, read> inB: array<vec4<ACT>>;
+@group(0) @binding(3) var<storage, read> xfA: array<vec4<f32>>;
+@group(0) @binding(4) var<storage, read> xfB: array<vec4<f32>>;
+@group(0) @binding(5) var<storage, read> wts: array<vec4<WT>>;
+@group(0) @binding(6) var<storage, read> bias: array<vec4<f32>>;
+@group(0) @binding(7) var<storage, read_write> outp: array<vec4<ACT>>;
+const ID = ${ID}u; const IH = ${IH}u; const IW = ${IW}u; const TILE = ${TILE}u;
+const NV = ${NV}u; const NT = ${NT}u; const CK = ${CK}u;
+var<workgroup> tile: array<vec4<f32>, ${TILE * CK}>;
+@compute @workgroup_size(${NT})
+fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_index) li: u32) {
+  let wid = wg.x + wg.y * p.wgX;
+  let ct = wid % p.coutTiles;
+  var r = wid / p.coutTiles;
+  let tw = r % p.tilesW; r = r / p.tilesW;
+  let th = r % p.tilesH;
+  let td = r / p.tilesH;
+  if (td >= p.tilesD) { return; }
+  let od0 = td * ${TD}u; let oh0 = th * ${TH}u; let ow0 = tw * ${TW}u;
+  let gz0 = i32(od0 * ${SD}u) - 1; let gy0 = i32(oh0 * ${SH}u) - 1; let gx0 = i32(ow0 * ${SW}u) - 1;
+  let vg = li % NV; let cg = li / NV;
+  let vw4 = vg % ${TW / 4}u; let vh = (vg / ${TW / 4}u) % ${TH}u; let vd = vg / ${(TW / 4) * TH}u;
+  let cin4 = p.c4a + p.c4b;
+  let cout = p.cout4 * 4u;
+  let coBase = ct * ${COT}u + cg * 8u;
+  var acc: array<vec4<f32>, 8>;
+  for (var c0 = 0u; c0 < cin4; c0 = c0 + CK) {
+    for (var i = li; i < TILE * CK; i = i + NT) {
+      let k = i / TILE; let s = i % TILE;
+      let x = s % IW; let y = (s / IW) % IH; let z = s / (IW * IH);
+      let gz = gz0 + i32(z); let gy = gy0 + i32(y); let gx = gx0 + i32(x);
+      let c = c0 + k;
+      var v = vec4<f32>(0.0);
+      if (c < cin4 && gz >= 0 && gy >= 0 && gx >= 0 && gz < i32(p.inD) && gy < i32(p.inH) && gx < i32(p.inW)) {
+        let vox = (u32(gz) * p.inH + u32(gy)) * p.inW + u32(gx);
+        if (c < p.c4a) {
+          v = vec4<f32>(inA[vox * p.c4a + c]) * xfA[c] + xfA[p.c4a + c];
+          v = select(v * p.slopeA, v, v > vec4<f32>(0.0));
+        } else {
+          let cb = c - p.c4a;
+          v = vec4<f32>(inB[vox * p.c4b + cb]) * xfB[cb] + xfB[p.c4b + cb];
+          v = select(v * p.slopeB, v, v > vec4<f32>(0.0));
+        }
+      }
+      tile[i] = v;
+    }
+    workgroupBarrier();
+    for (var k = 0u; k < CK; k = k + 1u) {
+      let c = c0 + k;
+      if (c < cin4) {
+        for (var kd = 0u; kd < 3u; kd = kd + 1u) {
+          for (var kh = 0u; kh < 3u; kh = kh + 1u) {
+            let rowBase = k * TILE + ((vd * ${SD}u + kd) * IH + (vh * ${SH}u + kh)) * IW + vw4 * ${4 * SW}u;
+            for (var kw = 0u; kw < 3u; kw = kw + 1u) {
+              let tap = (kd * 3u + kh) * 3u + kw;
+              let wb = (tap * cin4 + c) * cout + coBase;
+              let w0 = vec4<f32>(wts[wb]); let w1 = vec4<f32>(wts[wb + 1u]);
+              let w2 = vec4<f32>(wts[wb + 2u]); let w3 = vec4<f32>(wts[wb + 3u]);
+              let w4 = vec4<f32>(wts[wb + 4u]); let w5 = vec4<f32>(wts[wb + 5u]);
+              let w6 = vec4<f32>(wts[wb + 6u]); let w7 = vec4<f32>(wts[wb + 7u]);
+              for (var j = 0u; j < 4u; j = j + 1u) {
+                let x = tile[rowBase + j * ${SW}u + kw];
+                acc[0][j] = acc[0][j] + dot(x, w0); acc[1][j] = acc[1][j] + dot(x, w1);
+                acc[2][j] = acc[2][j] + dot(x, w2); acc[3][j] = acc[3][j] + dot(x, w3);
+                acc[4][j] = acc[4][j] + dot(x, w4); acc[5][j] = acc[5][j] + dot(x, w5);
+                acc[6][j] = acc[6][j] + dot(x, w6); acc[7][j] = acc[7][j] + dot(x, w7);
+              }
+            }
+          }
+        }
+      }
+    }
+    workgroupBarrier();
+  }
+  let od = od0 + vd; let oh = oh0 + vh;
+  if (od >= p.outD || oh >= p.outH) { return; }
+  let b0 = bias[coBase / 4u]; let b1 = bias[coBase / 4u + 1u];
+  for (var j = 0u; j < 4u; j = j + 1u) {
+    let ow = ow0 + vw4 * 4u + j;
+    if (ow < p.outW) {
+      let o = ((od * p.outH + oh) * p.outW + ow) * p.cout4 + coBase / 4u;
+      outp[o] = vec4<ACT>(vec4<f32>(acc[0][j], acc[1][j], acc[2][j], acc[3][j]) + b0);
+      outp[o + 1u] = vec4<ACT>(vec4<f32>(acc[4][j], acc[5][j], acc[6][j], acc[7][j]) + b1);
+    }
+  }
+}`;
+}
+
+// Per-chunk Welford statistics for InstanceNorm (biased variance, like PyTorch).
+function wgslStats(f16) {
+  return WG_HEADER(f16) + `
+struct P { n: u32, c4: u32, chunk: u32, nChunks: u32 };
+@group(0) @binding(0) var<uniform> p: P;
+@group(0) @binding(1) var<storage, read> x: array<vec4<ACT>>;
+@group(0) @binding(2) var<storage, read_write> part: array<vec4<f32>>;
+var<workgroup> sn: array<f32, 64>;
+var<workgroup> sm: array<vec4<f32>, 64>;
+var<workgroup> s2: array<vec4<f32>, 64>;
+@compute @workgroup_size(64)
+fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_index) li: u32) {
+  let chunkId = wg.x; let c = wg.y;
+  let start = chunkId * p.chunk; let end = min(start + p.chunk, p.n);
+  var n = 0.0; var mean = vec4<f32>(0.0); var m2 = vec4<f32>(0.0);
+  for (var v = start + li; v < end; v = v + 64u) {
+    let xv = vec4<f32>(x[v * p.c4 + c]);
+    n = n + 1.0; let d = xv - mean; mean = mean + d / n; m2 = m2 + d * (xv - mean);
+  }
+  sn[li] = n; sm[li] = mean; s2[li] = m2;
+  workgroupBarrier();
+  for (var s = 32u; s > 0u; s = s >> 1u) {
+    if (li < s) {
+      let na = sn[li]; let nb = sn[li + s]; let nn = na + nb;
+      if (nn > 0.0) {
+        let d = sm[li + s] - sm[li];
+        sm[li] = sm[li] + d * (nb / nn);
+        s2[li] = s2[li] + s2[li + s] + d * d * (na * nb / nn);
+        sn[li] = nn;
+      }
+    }
+    workgroupBarrier();
+  }
+  if (li == 0u) {
+    part[(chunkId * p.c4 + c) * 2u] = sm[0];
+    part[(chunkId * p.c4 + c) * 2u + 1u] = s2[0];
+  }
+}`;
+}
+
+// Combine chunk statistics and emit per-channel scale/shift = gamma*invstd, beta-mean*scale.
+function wgslStatsFinal() {
+  return `
+struct P { n: u32, c4: u32, chunk: u32, nChunks: u32, eps: f32 };
+@group(0) @binding(0) var<uniform> p: P;
+@group(0) @binding(1) var<storage, read> part: array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read> gb: array<vec4<f32>>;
+@group(0) @binding(3) var<storage, read_write> xf: array<vec4<f32>>;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let c = gid.x;
+  if (c >= p.c4) { return; }
+  var n = 0.0; var mean = vec4<f32>(0.0); var m2 = vec4<f32>(0.0);
+  for (var k = 0u; k < p.nChunks; k = k + 1u) {
+    let nb = f32(min(p.chunk, p.n - k * p.chunk));
+    let mb = part[(k * p.c4 + c) * 2u]; let qb = part[(k * p.c4 + c) * 2u + 1u];
+    let nn = n + nb; let d = mb - mean;
+    mean = mean + d * (nb / nn); m2 = m2 + qb + d * d * (n * nb / nn); n = nn;
+  }
+  let inv = inverseSqrt(m2 / n + vec4<f32>(p.eps));
+  let scale = gb[c] * inv;
+  xf[c] = scale;
+  xf[p.c4 + c] = gb[p.c4 + c] - mean * scale;
+}`;
+}
+
+// Transposed convolution with kernel == stride (non-overlapping), PyTorch semantics.
+function wgslTranspConv(f16, s) {
+  const [SD, SH, SW] = s;
+  return WG_HEADER(f16) + `
+struct P { inD: u32, inH: u32, inW: u32, c4in: u32, outD: u32, outH: u32, outW: u32, cout4: u32,
+  total: u32, cgs: u32, wgX: u32, slope: f32 };
+@group(0) @binding(0) var<uniform> p: P;
+@group(0) @binding(1) var<storage, read> inp: array<vec4<ACT>>;
+@group(0) @binding(2) var<storage, read> xf: array<vec4<f32>>;
+@group(0) @binding(3) var<storage, read> wts: array<vec4<WT>>;
+@group(0) @binding(4) var<storage, read> bias: array<vec4<f32>>;
+@group(0) @binding(5) var<storage, read_write> outp: array<vec4<ACT>>;
+@compute @workgroup_size(64)
+fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_index) li: u32) {
+  let g = (wg.x + wg.y * p.wgX) * 64u + li;
+  if (g >= p.total) { return; }
+  let cg = g % p.cgs; let vox = g / p.cgs;
+  let ow = vox % p.outW; let oh = (vox / p.outW) % p.outH; let od = vox / (p.outW * p.outH);
+  let sub = ((od % ${SD}u) * ${SH}u + (oh % ${SH}u)) * ${SW}u + (ow % ${SW}u);
+  let iv = ((od / ${SD}u) * p.inH + oh / ${SH}u) * p.inW + ow / ${SW}u;
+  let cout = p.cout4 * 4u;
+  var a0 = vec4<f32>(0.0); var a1 = vec4<f32>(0.0);
+  for (var c = 0u; c < p.c4in; c = c + 1u) {
+    var x = vec4<f32>(inp[iv * p.c4in + c]) * xf[c] + xf[p.c4in + c];
+    x = select(x * p.slope, x, x > vec4<f32>(0.0));
+    let wb = (sub * p.c4in + c) * cout + cg * 8u;
+    a0 = a0 + vec4<f32>(dot(x, vec4<f32>(wts[wb])), dot(x, vec4<f32>(wts[wb + 1u])), dot(x, vec4<f32>(wts[wb + 2u])), dot(x, vec4<f32>(wts[wb + 3u])));
+    a1 = a1 + vec4<f32>(dot(x, vec4<f32>(wts[wb + 4u])), dot(x, vec4<f32>(wts[wb + 5u])), dot(x, vec4<f32>(wts[wb + 6u])), dot(x, vec4<f32>(wts[wb + 7u])));
+  }
+  let o = vox * p.cout4 + cg * 2u;
+  outp[o] = vec4<ACT>(a0 + bias[cg * 2u]);
+  outp[o + 1u] = vec4<ACT>(a1 + bias[cg * 2u + 1u]);
+}`;
+}
+
+// Copy one patch of the normalized grid into the network input (zero outside).
+function wgslExtract(f16) {
+  return WG_HEADER(f16) + `
+struct P { gD: u32, gH: u32, gW: u32, pD: u32, pH: u32, pW: u32, oD: i32, oH: i32, oW: i32, total: u32, wgX: u32 };
+@group(0) @binding(0) var<uniform> p: P;
+@group(0) @binding(1) var<storage, read> vol: array<f32>;
+@group(0) @binding(2) var<storage, read_write> outp: array<vec4<ACT>>;
+@compute @workgroup_size(64)
+fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_index) li: u32) {
+  let g = (wg.x + wg.y * p.wgX) * 64u + li;
+  if (g >= p.total) { return; }
+  let w = g % p.pW; let h = (g / p.pW) % p.pH; let d = g / (p.pW * p.pH);
+  let z = i32(d) + p.oD; let y = i32(h) + p.oH; let x = i32(w) + p.oW;
+  var v = 0.0;
+  if (z >= 0 && y >= 0 && x >= 0 && z < i32(p.gD) && y < i32(p.gH) && x < i32(p.gW)) {
+    v = vol[(u32(z) * p.gH + u32(y)) * p.gW + u32(x)];
+  }
+  outp[g] = vec4<ACT>(vec4<f32>(v, 0.0, 0.0, 0.0));
+}`;
+}
+
+// 1x1x1 segmentation head fused with Gaussian-weighted accumulation into a ring of
+// grid rows (sliding-window aggregation). Slot NC holds the weight sum.
+function wgslSegAccum(f16, NC) {
+  const S = NC + 1;
+  return WG_HEADER(f16) + `
+struct P { pD: u32, pH: u32, pW: u32, c4in: u32, gD: u32, gH: u32, gW: u32, ring: u32,
+  oD: i32, oH: i32, oW: i32, total: u32, wgX: u32, slope: f32, scale: f32, pad0: u32,
+  inv2s2: vec4<f32> };
+@group(0) @binding(0) var<uniform> p: P;
+@group(0) @binding(1) var<storage, read> inp: array<vec4<ACT>>;
+@group(0) @binding(2) var<storage, read> xf: array<vec4<f32>>;
+@group(0) @binding(3) var<storage, read> wts: array<vec4<f32>>;
+@group(0) @binding(4) var<storage, read> bias: array<f32>;
+@group(0) @binding(5) var<storage, read_write> acc: array<f32>;
+@compute @workgroup_size(64)
+fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_index) li: u32) {
+  let g = (wg.x + wg.y * p.wgX) * 64u + li;
+  if (g >= p.total) { return; }
+  let w = g % p.pW; let h = (g / p.pW) % p.pH; let d = g / (p.pW * p.pH);
+  let z = i32(d) + p.oD; let y = i32(h) + p.oH; let x = i32(w) + p.oW;
+  if (z < 0 || y < 0 || x < 0 || z >= i32(p.gD) || y >= i32(p.gH) || x >= i32(p.gW)) { return; }
+  let dd = f32(d) - f32(p.pD / 2u); let dh = f32(h) - f32(p.pH / 2u); let dw = f32(w) - f32(p.pW / 2u);
+  let gw = p.scale * exp(-(dd * dd * p.inv2s2.x + dh * dh * p.inv2s2.y + dw * dw * p.inv2s2.z));
+  var l: array<f32, ${NC}>;
+  for (var k = 0u; k < ${NC}u; k = k + 1u) { l[k] = bias[k]; }
+  for (var c = 0u; c < p.c4in; c = c + 1u) {
+    var v = vec4<f32>(inp[g * p.c4in + c]) * xf[c] + xf[p.c4in + c];
+    v = select(v * p.slope, v, v > vec4<f32>(0.0));
+    for (var k = 0u; k < ${NC}u; k = k + 1u) { l[k] = l[k] + dot(v, wts[k * p.c4in + c]); }
+  }
+  let o = ((u32(z) % p.ring) * p.gH * p.gW + u32(y) * p.gW + u32(x)) * ${S}u;
+  for (var k = 0u; k < ${NC}u; k = k + 1u) { acc[o + k] = acc[o + k] + gw * l[k]; }
+  acc[o + ${NC}u] = acc[o + ${NC}u] + gw;
+}`;
+}
+
+// Finalize completed ring rows: argmax -> label, and per-voxel softmax-free margin
+// (top1 - top2 of the averaged logits) for sub-voxel surfaces. Clears the rows.
+function wgslFinalize(NC) {
+  const S = NC + 1;
+  return `
+struct P { gH: u32, gW: u32, ring: u32, d0: u32, total: u32, wgX: u32 };
+@group(0) @binding(0) var<uniform> p: P;
+@group(0) @binding(1) var<storage, read_write> acc: array<f32>;
+@group(0) @binding(2) var<storage, read_write> labels: array<u32>;
+@group(0) @binding(3) var<storage, read_write> scores: array<f32>;
+@compute @workgroup_size(64)
+fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_index) li: u32) {
+  let g = (wg.x + wg.y * p.wgX) * 64u + li;
+  if (g >= p.total) { return; }
+  let plane = p.gH * p.gW;
+  let d = p.d0 + g / plane; let r = g % plane;
+  let o = ((d % p.ring) * plane + r) * ${S}u;
+  let ws = max(acc[o + ${NC}u], 1e-12);
+  var best = 0u; var b1 = -3.4e38; var b2 = -3.4e38;
+  for (var k = 0u; k < ${NC}u; k = k + 1u) {
+    let v = acc[o + k] / ws;
+    if (v > b1) { b2 = b1; b1 = v; best = k; } else if (v > b2) { b2 = v; }
+    acc[o + k] = 0.0;
+  }
+  acc[o + ${NC}u] = 0.0;
+  let gi = d * plane + r;
+  labels[gi] = best;
+  scores[gi] = b1 - b2;
+}`;
+}
+
+// Generic nnU-Net PlainConvUNet built from model.json.
+class UNetEngine {
+  constructor(gpu, pkg) {
+    this.gpu = gpu; this.device = gpu.device; this.f16 = gpu.f16; this.pkg = pkg;
+    this.spec = pkg.manifest.network; this.NC = this.spec.numClasses;
+    this.slope = this.spec.nonlin.slope; this.eps = this.spec.norm.eps;
+    this.pipelines = new Map(); this.buffers = [];
+    this.actBytes = this.f16 ? 2 : 4;
+  }
+
+  // ------------------------------------------------------------ helpers
+  pipeline(key, code) {
+    if (!this.pipelines.has(key)) {
+      const module = this.device.createShaderModule({ code, label: key });
+      this.pipelines.set(key, this.device.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' }, label: key }));
+    }
+    return this.pipelines.get(key);
+  }
+  buffer(size, usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC, label) {
+    const b = this.device.createBuffer({ size: Math.max(16, Math.ceil(size / 16) * 16), usage, label });
+    this.buffers.push(b); return b;
+  }
+  upload(data, label) {
+    const b = this.buffer(data.byteLength, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC, label);
+    this.device.queue.writeBuffer(b, 0, data.buffer, data.byteOffset, data.byteLength);
+    return b;
+  }
+  uniform(bytes) {
+    const b = this.buffer(bytes.byteLength, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 'uniform');
+    this.device.queue.writeBuffer(b, 0, bytes);
+    return b;
+  }
+  weightArray(n) { return this.f16 ? new Uint16Array(n) : new Float32Array(n); }
+  setW(arr, i, h) { arr[i] = this.f16 ? h : F16_TO_F32[h]; }
+  f32of(name) { const t = getTensor(this.pkg, name); const o = new Float32Array(t.data.length); for (let i = 0; i < o.length; i++) o[i] = F16_TO_F32[t.data[i]]; return o; }
+  vec4pad(arr, c) { const o = new Float32Array(Math.ceil(c / 4) * 4); o.set(arr.subarray(0, c)); return o; }
+
+  // ------------------------------------------------------------ weights
+  convWeights(name, cinSplit, opts = {}) {
+    // torch [co][ci][3][3][3] -> [tap][cin4][co][4]
+    const t = getTensor(this.pkg, name + '.weight');
+    const [co, ci] = t.shape;
+    const cinPad = cinSplit.reduce((a, c) => a + Math.ceil(c / 4) * 4, 0);
+    const cin4 = cinPad / 4;
+    const w = this.weightArray(27 * cinPad * co);
+    // map logical input channel -> padded channel (each concat part is padded to a multiple of 4)
+    const map = []; let base = 0;
+    for (const c of cinSplit) { for (let i = 0; i < c; i++) map.push(base + i); base += Math.ceil(c / 4) * 4; }
+    for (let o = 0; o < co; o++) for (let i = 0; i < ci; i++) for (let tap = 0; tap < 27; tap++) {
+      const pc = map[i];
+      this.setW(w, ((tap * cin4 + (pc >> 2)) * co + o) * 4 + (pc & 3), t.data[(o * ci + i) * 27 + tap]);
+    }
+    // The bias of a convolution followed by InstanceNorm cancels in the normalization;
+    // leaving it out keeps the raw (pre-norm) activations closer to zero, which preserves
+    // precision when they are stored as float16.
+    const bias = this.vec4pad(this.f32of(name + '.bias'), co);
+    if (opts.beforeNorm) bias.fill(0);
+    return { w: this.upload(w, name + '.w'), b: this.upload(bias, name + '.b'), cout: co, cin4 };
+  }
+  normParams(name, c) {
+    const g = this.f32of(name + '.weight'), b = this.f32of(name + '.bias');
+    const c4 = Math.ceil(c / 4) * 4; const o = new Float32Array(2 * c4);
+    o.set(g, 0); o.set(b, c4);
+    return this.upload(o, name + '.gb');
+  }
+  transpWeights(name, stride) {
+    // torch [ci][co][sd][sh][sw] -> [sub][cin4][co][4]
+    const t = getTensor(this.pkg, name + '.weight');
+    const [ci, co] = t.shape; const ns = stride[0] * stride[1] * stride[2];
+    const cin4 = Math.ceil(ci / 4);
+    const w = this.weightArray(ns * cin4 * 4 * co);
+    for (let i = 0; i < ci; i++) for (let o = 0; o < co; o++) for (let s = 0; s < ns; s++)
+      this.setW(w, ((s * cin4 + (i >> 2)) * co + o) * 4 + (i & 3), t.data[(i * co + o) * ns + s]);
+    return { w: this.upload(w, name + '.w'), b: this.upload(this.vec4pad(this.f32of(name + '.bias'), co), name + '.b'), cout: co, cin4 };
+  }
+
+  // ------------------------------------------------------------ build
+  // Builds all buffers, bind groups and the dispatch list for one patch size.
+  build(patch) {
+    const S = this.spec.features.length;
+    const dev = this.device;
+    this.patch = patch;
+    const shapes = [patch.slice()];
+    for (let s = 1; s < S; s++) shapes.push(shapes[s - 1].map((v, a) => Math.ceil(v / this.spec.strides[s][a])));
+    this.shapes = shapes;
+    const nvox = (sh) => sh[0] * sh[1] * sh[2];
+
+    // identity transform (network input and transposed-conv outputs): scale 1, shift 0
+    const identCache = new Map();
+    this.identXF = (c4) => {
+      if (!identCache.has(c4)) { const a = new Float32Array(8 * c4); a.fill(1, 0, 4 * c4); identCache.set(c4, this.upload(a, 'identity-xf' + c4)); }
+      return identCache.get(c4);
+    };
+    this.dummy = this.buffer(16, GPUBufferUsage.STORAGE, 'dummy');
+
+    // ---- tensor allocation with liveness-based reuse
+    const pool = [];
+    const alloc = (bytes, label) => {
+      const i = this.debug ? -1 : pool.findIndex((p) => p.free && p.size === bytes);
+      if (i >= 0) { pool[i].free = false; return pool[i]; }
+      const e = { buf: this.buffer(bytes, undefined, label), size: bytes, free: false }; pool.push(e); return e;
+    };
+    const release = (e) => { e.free = true; };
+    const tensor = (shape, c, label) => {
+      const c4 = Math.ceil(c / 4);
+      return { shape, c, c4, mem: alloc(nvox(shape) * c4 * 4 * this.actBytes, label), xf: null, slope: 1 };
+    };
+
+    // stats scratch (sized for the largest tensor)
+    const chunk = 4096;
+    let maxPart = 0;
+    for (let s = 0; s < S; s++) maxPart = Math.max(maxPart, ceilDiv(nvox(shapes[s]), chunk) * Math.ceil(this.spec.features[s] / 4));
+    this.statsPart = this.buffer(maxPart * 2 * 16, undefined, 'stats-part');
+
+    this.ops = [];
+    const input = tensor(patch, 4, 'input'); input.xf = this.identXF(1); input.slope = 1;
+    this.input = input;
+
+    const conv = (name, a, b, stride, cout, label) => {
+      const outShape = a.shape.map((v, i) => Math.ceil(v / stride[i]));
+      const cw = this.convWeights(name + '.conv', b ? [a.c, b.c] : [a.c === 4 && a === input ? 1 : a.c], { beforeNorm: true });
+      const out = tensor(outShape, cout, label);
+      const strided = stride.some((s) => s !== 1);
+      const T = strided ? { TD: 2, TH: 4, TW: 8, COT: 64, CK: 1 } : { TD: 4, TH: 4, TW: 8, COT: 32, CK: 2 };
+      if (cout % T.COT) T.COT = 32;
+      const t = { ...T, SD: stride[0], SH: stride[1], SW: stride[2] };
+      const key = `conv-${t.TD}${t.TH}${t.TW}-${t.COT}-${stride.join('')}-${t.CK}`;
+      const pipe = this.pipeline(key, wgslConv(this.f16, t));
+      const tiles = [ceilDiv(outShape[0], t.TD), ceilDiv(outShape[1], t.TH), ceilDiv(outShape[2], t.TW)];
+      const coutTiles = cout / t.COT;
+      const nwg = tiles[0] * tiles[1] * tiles[2] * coutTiles;
+      const wgX = Math.min(nwg, 65535), wgY = ceilDiv(nwg, wgX);
+      const u = new ArrayBuffer(64), U = new Uint32Array(u), F = new Float32Array(u);
+      U.set([a.shape[0], a.shape[1], a.shape[2], a.c4, b ? b.c4 : 0, outShape[0], outShape[1], outShape[2],
+        Math.ceil(cout / 4), tiles[0], tiles[1], tiles[2], coutTiles, wgX]);
+      F[14] = a.slope; F[15] = b ? b.slope : 1;
+      const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: this.uniform(u) } },
+        { binding: 1, resource: { buffer: a.mem.buf } },
+        { binding: 2, resource: { buffer: b ? b.mem.buf : this.dummy } },
+        { binding: 3, resource: { buffer: a.xf } },
+        { binding: 4, resource: { buffer: b ? b.xf : this.identXF(1) } },
+        { binding: 5, resource: { buffer: cw.w } },
+        { binding: 6, resource: { buffer: cw.b } },
+        { binding: 7, resource: { buffer: out.mem.buf } }] });
+      this.ops.push({ pipe, bg, wg: [wgX, wgY], label: name, flops: 2 * 27 * nvox(outShape) * cout * (a.c + (b ? b.c : 0)) });
+      // instance norm statistics -> out.xf
+      const n = nvox(outShape), c4 = Math.ceil(cout / 4), nChunks = ceilDiv(n, chunk);
+      const su = new Uint32Array([n, c4, chunk, nChunks]);
+      const sp = this.pipeline('stats', wgslStats(this.f16));
+      this.ops.push({ pipe: sp, wg: [nChunks, c4], label: name + '.stats', bg: dev.createBindGroup({ layout: sp.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: this.uniform(su) } },
+        { binding: 1, resource: { buffer: out.mem.buf } },
+        { binding: 2, resource: { buffer: this.statsPart } }] }) });
+      const fu = new ArrayBuffer(32); new Uint32Array(fu).set([n, c4, chunk, nChunks]); new Float32Array(fu)[4] = this.eps;
+      const fp = this.pipeline('statsFinal', wgslStatsFinal());
+      out.xf = this.buffer(2 * c4 * 16, undefined, name + '.xf'); out.slope = this.slope;
+      (this.named ||= {})[name] = out;
+      this.ops.push({ pipe: fp, wg: [ceilDiv(c4, 64), 1], label: name + '.norm', bg: dev.createBindGroup({ layout: fp.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: this.uniform(fu) } },
+        { binding: 1, resource: { buffer: this.statsPart } },
+        { binding: 2, resource: { buffer: this.normParams(name + '.norm', cout) } },
+        { binding: 3, resource: { buffer: out.xf } }] }) });
+      return out;
+    };
+
+    // ---- encoder
+    const skips = [];
+    let x = input;
+    for (let s = 0; s < S; s++) {
+      for (let i = 0; i < this.spec.nConvEncoder[s]; i++) {
+        const y = conv(`encoder.stages.${s}.0.convs.${i}`, x, null, i === 0 ? this.spec.strides[s] : [1, 1, 1], this.spec.features[s], `enc${s}.${i}`);
+        if (x !== input || s > 0) { if (!skips.includes(x)) release(x.mem); }
+        x = y;
+      }
+      skips.push(x);
+    }
+    // ---- decoder
+    let prev = skips[S - 1];
+    for (let s = 0; s < S - 1; s++) {
+      const skip = skips[S - 2 - s];
+      const stride = this.spec.strides[S - 1 - s];
+      const tw = this.transpWeights(`decoder.transpconvs.${s}`, stride);
+      const up = tensor(skip.shape, tw.cout, `up${s}`); up.xf = this.identXF(Math.ceil(tw.cout / 4)); up.slope = 1;
+      (this.named ||= {})[`decoder.transpconvs.${s}`] = up;
+      const tp = this.pipeline('transp-' + stride.join(''), wgslTranspConv(this.f16, stride));
+      const cgs = tw.cout / 8, total = nvox(skip.shape) * cgs;
+      const nwg = ceilDiv(total, 64), wgX = Math.min(nwg, 65535);
+      const u = new ArrayBuffer(48), U = new Uint32Array(u), F = new Float32Array(u);
+      U.set([prev.shape[0], prev.shape[1], prev.shape[2], prev.c4, skip.shape[0], skip.shape[1], skip.shape[2], Math.ceil(tw.cout / 4), total, cgs, wgX]);
+      F[11] = prev.slope;
+      this.ops.push({ pipe: tp, wg: [wgX, ceilDiv(nwg, wgX)], label: `transp${s}`, bg: this.device.createBindGroup({ layout: tp.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: this.uniform(u) } },
+        { binding: 1, resource: { buffer: prev.mem.buf } },
+        { binding: 2, resource: { buffer: prev.xf } },
+        { binding: 3, resource: { buffer: tw.w } },
+        { binding: 4, resource: { buffer: tw.b } },
+        { binding: 5, resource: { buffer: up.mem.buf } }] }) });
+      release(prev.mem);
+      let y = up, other = skip;
+      for (let i = 0; i < this.spec.nConvDecoder[s]; i++) {
+        const z = conv(`decoder.stages.${s}.convs.${i}`, y, i === 0 ? other : null, [1, 1, 1], this.spec.features[S - 2 - s], `dec${s}.${i}`);
+        release(y.mem); if (i === 0) release(other.mem);
+        y = z;
+      }
+      prev = y;
+    }
+    this.last = prev;
+    // ---- segmentation head weights
+    const segName = `decoder.seg_layers.${S - 2}`;
+    const sw = getTensor(this.pkg, segName + '.weight');
+    const cin = sw.shape[1], c4 = Math.ceil(cin / 4);
+    const segW = new Float32Array(this.NC * c4 * 4);
+    for (let k = 0; k < this.NC; k++) for (let i = 0; i < cin; i++) segW[(k * c4 + (i >> 2)) * 4 + (i & 3)] = F16_TO_F32[sw.data[k * cin + i]];
+    this.segW = this.upload(segW, 'seg.w');
+    this.segB = this.upload(this.vec4pad(this.f32of(segName + '.bias'), this.NC), 'seg.b');
+    this.peakBytes = pool.reduce((a, p) => a + p.size, 0);
+    this.totalFlops = this.ops.reduce((a, o) => a + (o.flops || 0), 0);
+  }
+
+  encodeNetwork(enc) {
+    const pass = enc.beginComputePass();
+    for (const op of this.ops) { pass.setPipeline(op.pipe); pass.setBindGroup(0, op.bg); pass.dispatchWorkgroups(op.wg[0], op.wg[1]); }
+    pass.end();
+  }
+
+  // ------------------------------------------------------------ sliding window
+  // vol: Float32Array (D,H,W) in network axis order, normalized.
+  async segment(vol, dims, opts = {}) {
+    const { onProgress = () => {}, signal } = opts;
+    const dev = this.device, patch = this.patch, NC = this.NC, SL = NC + 1;
+    const [gD, gH, gW] = dims;
+    const pad = patch.map((p, i) => Math.max(0, p - dims[i]));
+    const padB = pad.map((p) => Math.floor(p / 2));
+    const padded = dims.map((d, i) => d + pad[i]);
+    const steps = padded.map((d, i) => slidingSteps(d, patch[i], opts.tileStep ?? 0.5));
+    const ring = patch[0];
+    const plane = gH * gW;
+    const volBuf = this.upload(vol, 'grid');
+    const acc = this.buffer(ring * plane * SL * 4, undefined, 'accum');
+    const labels = this.buffer(gD * plane * 4, undefined, 'labels');
+    const scores = this.buffer(gD * plane * 4, undefined, 'scores');
+    // extract + seg pipelines (per-patch uniforms)
+    const ep = this.pipeline('extract', wgslExtract(this.f16));
+    const sp = this.pipeline('seg' + NC, wgslSegAccum(this.f16, NC));
+    const fp = this.pipeline('final' + NC, wgslFinalize(NC));
+    const pv = patch[0] * patch[1] * patch[2];
+    const eU = this.buffer(48, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+    const sU = this.buffer(80, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+    const nwgP = ceilDiv(pv, 64), wgXP = Math.min(nwgP, 65535), wgYP = ceilDiv(nwgP, wgXP);
+    const ebg = dev.createBindGroup({ layout: ep.getBindGroupLayout(0), entries: [
+      { binding: 0, resource: { buffer: eU } }, { binding: 1, resource: { buffer: volBuf } }, { binding: 2, resource: { buffer: this.input.mem.buf } }] });
+    const sbg = dev.createBindGroup({ layout: sp.getBindGroupLayout(0), entries: [
+      { binding: 0, resource: { buffer: sU } }, { binding: 1, resource: { buffer: this.last.mem.buf } },
+      { binding: 2, resource: { buffer: this.last.xf } }, { binding: 3, resource: { buffer: this.segW } },
+      { binding: 4, resource: { buffer: this.segB } }, { binding: 5, resource: { buffer: acc } }] });
+    const sigma = patch.map((p) => p * (this.pkg.manifest.inference?.gaussianSigmaScale ?? 0.125));
+    const gScale = this.pkg.manifest.inference?.gaussianValueScale ?? 10;
+    const finalize = (d0, d1) => {
+      if (d1 <= d0) return;
+      const total = (d1 - d0) * plane, nwg = ceilDiv(total, 64), wgX = Math.min(nwg, 65535);
+      const u = this.uniform(new Uint32Array([gH, gW, ring, d0, total, wgX]));
+      const bg = dev.createBindGroup({ layout: fp.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: u } }, { binding: 1, resource: { buffer: acc } },
+        { binding: 2, resource: { buffer: labels } }, { binding: 3, resource: { buffer: scores } }] });
+      const enc = dev.createCommandEncoder(); const pass = enc.beginComputePass();
+      pass.setPipeline(fp); pass.setBindGroup(0, bg); pass.dispatchWorkgroups(wgX, ceilDiv(nwg, wgX)); pass.end();
+      dev.queue.submit([enc.finish()]);
+    };
+    const windows = [];
+    for (const a of steps[0]) for (const b of steps[1]) for (const c of steps[2]) windows.push([a, b, c]);
+    const t0 = performance.now(); let done = 0, finalizedTo = 0;
+    try {
+    for (let wi = 0; wi < windows.length; wi++) {
+      if (signal?.aborted) throw new Cancelled();
+      const [a, b, c] = windows[wi];
+      const off = [a - padB[0], b - padB[1], c - padB[2]];
+      const eu = new ArrayBuffer(48), EU = new Uint32Array(eu), EI = new Int32Array(eu);
+      EU.set([gD, gH, gW, patch[0], patch[1], patch[2]]); EI.set(off, 6); EU[9] = pv; EU[10] = wgXP;
+      dev.queue.writeBuffer(eU, 0, eu);
+      const su = new ArrayBuffer(80), SU = new Uint32Array(su), SI = new Int32Array(su), SF = new Float32Array(su);
+      SU.set([patch[0], patch[1], patch[2], this.last.c4, gD, gH, gW, ring]); SI.set(off, 8); SU[11] = pv; SU[12] = wgXP;
+      SF[13] = this.last.slope; SF[14] = gScale;
+      SF.set(sigma.map((s) => 1 / (2 * s * s)), 16);
+      dev.queue.writeBuffer(sU, 0, su);
+      const enc = dev.createCommandEncoder();
+      let pass = enc.beginComputePass(); pass.setPipeline(ep); pass.setBindGroup(0, ebg); pass.dispatchWorkgroups(wgXP, wgYP); pass.end();
+      this.encodeNetwork(enc);
+      pass = enc.beginComputePass(); pass.setPipeline(sp); pass.setBindGroup(0, sbg); pass.dispatchWorkgroups(wgXP, wgYP); pass.end();
+      dev.queue.submit([enc.finish()]);
+      // rows strictly before the next window's first row are final
+      const next = windows[wi + 1];
+      if (!next || next[0] !== a) {
+        const upTo = next ? Math.min(gD, Math.max(0, next[0] - padB[0])) : gD;
+        finalize(finalizedTo, upTo); finalizedTo = Math.max(finalizedTo, upTo);
+      }
+      await dev.queue.onSubmittedWorkDone();
+      done++;
+      const el = (performance.now() - t0) / 1000;
+      onProgress({ done, total: windows.length, elapsed: el, eta: el / done * (windows.length - done) });
+    }
+    var out = await this.readBuffer(labels, gD * plane * 4);
+    var sc = await this.readBuffer(scores, gD * plane * 4);
+    } finally {
+      for (const b of [volBuf, acc, labels, scores]) b.destroy();
+      this.buffers = this.buffers.filter((b) => ![volBuf, acc, labels, scores].includes(b));
+    }
+    const lab = new Uint8Array(gD * plane); const L = new Uint32Array(out);
+    for (let i = 0; i < lab.length; i++) lab[i] = L[i];
+    return { labels: lab, margin: new Float32Array(sc), windows: windows.length, steps, seconds: (performance.now() - t0) / 1000 };
+  }
+
+  async readBuffer(buf, bytes) {
+    const rb = this.device.createBuffer({ size: bytes, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const enc = this.device.createCommandEncoder(); enc.copyBufferToBuffer(buf, 0, rb, 0, bytes);
+    this.device.queue.submit([enc.finish()]);
+    await rb.mapAsync(GPUMapMode.READ);
+    const out = rb.getMappedRange().slice(0); rb.unmap(); rb.destroy();
+    return out;
+  }
+
+  // run the network on one patch (tests): returns logits Float32Array [NC][D][H][W]
+  async runPatch(x) {
+    const p = this.patch, n = p[0] * p[1] * p[2];
+    const src = new Float32Array(n * 4); for (let i = 0; i < n; i++) src[i * 4] = x[i];
+    if (this.f16) { const h = new Uint16Array(n * 4); for (let i = 0; i < n; i++) h[i * 4] = F32_TO_F16(x[i]); this.device.queue.writeBuffer(this.input.mem.buf, 0, h); }
+    else this.device.queue.writeBuffer(this.input.mem.buf, 0, src);
+    const enc = this.device.createCommandEncoder(); this.encodeNetwork(enc); this.device.queue.submit([enc.finish()]);
+    const t0 = performance.now(); await this.device.queue.onSubmittedWorkDone(); const sec = (performance.now() - t0) / 1000;
+    // seg head on CPU from the last decoder tensor (test path only)
+    const last = this.last, c4 = last.c4;
+    const raw = await this.readBuffer(last.mem.buf, n * c4 * 4 * this.actBytes);
+    const xf = new Float32Array(await this.readBuffer(last.xf, c4 * 2 * 16));
+    const vals = this.f16 ? new Uint16Array(raw) : new Float32Array(raw);
+    const segW = new Float32Array(await this.readBuffer(this.segW, this.NC * c4 * 16));
+    const segB = new Float32Array(await this.readBuffer(this.segB, Math.ceil(this.NC / 4) * 16));
+    const out = new Float32Array(this.NC * n); const v = new Float32Array(c4 * 4);
+    for (let i = 0; i < n; i++) {
+      for (let c = 0; c < c4 * 4; c++) {
+        let a = this.f16 ? F16_TO_F32[vals[i * c4 * 4 + c]] : vals[i * c4 * 4 + c];
+        a = a * xf[c] + xf[c4 * 4 + c]; v[c] = a > 0 ? a : a * last.slope;
+      }
+      for (let k = 0; k < this.NC; k++) { let s = segB[k]; for (let c = 0; c < c4 * 4; c++) s += v[c] * segW[k * c4 * 4 + c]; out[k * n + i] = s; }
+    }
+    return { logits: out, seconds: sec };
+  }
+
+  destroy() { for (const b of this.buffers) b.destroy(); this.buffers = []; }
+}
+
+// nnU-Net compute_steps_for_sliding_window (numpy round = half to even)
+const roundHalfEven = (x) => { const f = Math.floor(x), d = x - f; return d > 0.5 || (d === 0.5 && f % 2 !== 0) ? f + 1 : f; };
+function slidingSteps(size, patch, step = 0.5) {
+  if (size <= patch) return [0];
+  const n = Math.ceil((size - patch) / (patch * step)) + 1;
+  const actual = (size - patch) / (n - 1);
+  return Array.from({ length: n }, (_, i) => roundHalfEven(actual * i));
+}
+
+// ------------------------------------------------------------- volumes
+// A source volume: data[k][j][i] (i fastest), affine maps (i,j,k,1) -> patient LPS mm.
+// value = stored * slope + intercept (HU for CT).
+const mat4 = {
+  mulVec(m, v) { return [0, 1, 2, 3].map((r) => m[r * 4] * v[0] + m[r * 4 + 1] * v[1] + m[r * 4 + 2] * v[2] + m[r * 4 + 3] * v[3]); },
+  invert(m) {
+    const a = m, inv = new Array(16);
+    inv[0] = a[5] * a[10] * a[15] - a[5] * a[11] * a[14] - a[9] * a[6] * a[15] + a[9] * a[7] * a[14] + a[13] * a[6] * a[11] - a[13] * a[7] * a[10];
+    inv[4] = -a[4] * a[10] * a[15] + a[4] * a[11] * a[14] + a[8] * a[6] * a[15] - a[8] * a[7] * a[14] - a[12] * a[6] * a[11] + a[12] * a[7] * a[10];
+    inv[8] = a[4] * a[9] * a[15] - a[4] * a[11] * a[13] - a[8] * a[5] * a[15] + a[8] * a[7] * a[13] + a[12] * a[5] * a[11] - a[12] * a[7] * a[9];
+    inv[12] = -a[4] * a[9] * a[14] + a[4] * a[10] * a[13] + a[8] * a[5] * a[14] - a[8] * a[6] * a[13] - a[12] * a[5] * a[10] + a[12] * a[6] * a[9];
+    inv[1] = -a[1] * a[10] * a[15] + a[1] * a[11] * a[14] + a[9] * a[2] * a[15] - a[9] * a[3] * a[14] - a[13] * a[2] * a[11] + a[13] * a[3] * a[10];
+    inv[5] = a[0] * a[10] * a[15] - a[0] * a[11] * a[14] - a[8] * a[2] * a[15] + a[8] * a[3] * a[14] + a[12] * a[2] * a[11] - a[12] * a[3] * a[10];
+    inv[9] = -a[0] * a[9] * a[15] + a[0] * a[11] * a[13] + a[8] * a[1] * a[15] - a[8] * a[3] * a[13] - a[12] * a[1] * a[11] + a[12] * a[3] * a[9];
+    inv[13] = a[0] * a[9] * a[14] - a[0] * a[10] * a[13] - a[8] * a[1] * a[14] + a[8] * a[2] * a[13] + a[12] * a[1] * a[10] - a[12] * a[2] * a[9];
+    inv[2] = a[1] * a[6] * a[15] - a[1] * a[7] * a[14] - a[5] * a[2] * a[15] + a[5] * a[3] * a[14] + a[13] * a[2] * a[7] - a[13] * a[3] * a[6];
+    inv[6] = -a[0] * a[6] * a[15] + a[0] * a[7] * a[14] + a[4] * a[2] * a[15] - a[4] * a[3] * a[14] - a[12] * a[2] * a[7] + a[12] * a[3] * a[6];
+    inv[10] = a[0] * a[5] * a[15] - a[0] * a[7] * a[13] - a[4] * a[1] * a[15] + a[4] * a[3] * a[13] + a[12] * a[1] * a[7] - a[12] * a[3] * a[5];
+    inv[14] = -a[0] * a[5] * a[14] + a[0] * a[6] * a[13] + a[4] * a[1] * a[14] - a[4] * a[2] * a[13] - a[12] * a[1] * a[6] + a[12] * a[2] * a[5];
+    inv[3] = -a[1] * a[6] * a[11] + a[1] * a[7] * a[10] + a[5] * a[2] * a[11] - a[5] * a[3] * a[10] - a[9] * a[2] * a[7] + a[9] * a[3] * a[6];
+    inv[7] = a[0] * a[6] * a[11] - a[0] * a[7] * a[10] - a[4] * a[2] * a[11] + a[4] * a[3] * a[10] + a[8] * a[2] * a[7] - a[8] * a[3] * a[6];
+    inv[11] = -a[0] * a[5] * a[11] + a[0] * a[7] * a[9] + a[4] * a[1] * a[11] - a[4] * a[3] * a[9] - a[8] * a[1] * a[7] + a[8] * a[3] * a[5];
+    inv[15] = a[0] * a[5] * a[10] - a[0] * a[6] * a[9] - a[4] * a[1] * a[10] + a[4] * a[2] * a[9] + a[8] * a[1] * a[6] - a[8] * a[2] * a[5];
+    let det = a[0] * inv[0] + a[1] * inv[4] + a[2] * inv[8] + a[3] * inv[12];
+    if (!det) throw new Error('singular affine'); det = 1 / det;
+    return inv.map((v) => v * det);
+  },
+};
+
+// Processing grid: identity-direction LPS grid covering the source voxel-support box,
+// centred on it, at the model spacing (x,y,z).
+function processingGrid(vol, spacingXYZ, scale = 1) {
+  const [ni, nj, nk] = vol.dims;
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const a of [-0.5, ni - 0.5]) for (const b of [-0.5, nj - 0.5]) for (const c of [-0.5, nk - 0.5]) {
+    const p = mat4.mulVec(vol.affine, [a, b, c, 1]);
+    for (let d = 0; d < 3; d++) { lo[d] = Math.min(lo[d], p[d]); hi[d] = Math.max(hi[d], p[d]); }
+  }
+  const t = spacingXYZ.map((s) => s * scale);
+  const size = [0, 1, 2].map((d) => Math.max(1, Math.ceil((hi[d] - lo[d]) / t[d] - 1e-6)));
+  const origin = [0, 1, 2].map((d) => (lo[d] + hi[d]) / 2 - (size[d] - 1) / 2 * t[d]);
+  return { size, origin, spacing: t };
+}
+
+// model spacing is given in nnU-Net array order after transpose_forward of (z,y,x)
+function modelSpacingXYZ(manifest) {
+  const pp = manifest.preprocessing, zyx = [0, 0, 0];
+  pp.transposeForward.forEach((a, i) => { zyx[a] = pp.spacing[i]; });
+  return [zyx[2], zyx[1], zyx[0]];
+}
+
+// Trilinear (clamp-to-edge) resampling of the source onto the grid, in (z,y,x) order.
+// Returns HU as Float32Array. Yields to the UI between slices.
+async function resampleToGrid(vol, grid, onProgress = () => {}, signal) {
+  const [nx, ny, nz] = grid.size, [ox, oy, oz] = grid.origin, [tx, ty, tz] = grid.spacing;
+  const [ni, nj, nk] = vol.dims, inv = mat4.invert(vol.affine);
+  const src = vol.data, slope = vol.slope ?? 1, inter = vol.intercept ?? 0;
+  const out = new Float32Array(nx * ny * nz);
+  const plane = ni * nj;
+  const mi = ni > 1 ? ni - 2 : 0, mj = nj > 1 ? nj - 2 : 0, mk = nk > 1 ? nk - 2 : 0;
+  let last = performance.now();
+  for (let z = 0; z < nz; z++) {
+    const pz = oz + z * tz;
+    for (let y = 0; y < ny; y++) {
+      const py = oy + y * ty;
+      // index = inv * (px,py,pz,1); linear in px
+      const bi = inv[1] * py + inv[2] * pz + inv[3], bj = inv[5] * py + inv[6] * pz + inv[7], bk = inv[9] * py + inv[10] * pz + inv[11];
+      let o = (z * ny + y) * nx;
+      for (let x = 0; x < nx; x++, o++) {
+        const px = ox + x * tx;
+        let fi = inv[0] * px + bi, fj = inv[4] * px + bj, fk = inv[8] * px + bk;
+        fi = fi < 0 ? 0 : fi > ni - 1 ? ni - 1 : fi; fj = fj < 0 ? 0 : fj > nj - 1 ? nj - 1 : fj; fk = fk < 0 ? 0 : fk > nk - 1 ? nk - 1 : fk;
+        let i0 = Math.floor(fi), j0 = Math.floor(fj), k0 = Math.floor(fk);
+        if (i0 > mi) i0 = mi; if (j0 > mj) j0 = mj; if (k0 > mk) k0 = mk;
+        const wi = fi - i0, wj = fj - j0, wk = fk - k0;
+        const i1 = i0 + 1 < ni ? i0 + 1 : ni - 1, j1 = j0 + 1 < nj ? j0 + 1 : nj - 1, k1 = k0 + 1 < nk ? k0 + 1 : nk - 1;
+        const a00 = k0 * plane + j0 * ni, a01 = k1 * plane + j0 * ni, a10 = k0 * plane + j1 * ni, a11 = k1 * plane + j1 * ni;
+        const v =
+          (1 - wi) * (1 - wj) * (1 - wk) * src[a00 + i0] + (1 - wi) * (1 - wj) * wk * src[a01 + i0] +
+          (1 - wi) * wj * (1 - wk) * src[a10 + i0] + (1 - wi) * wj * wk * src[a11 + i0] +
+          wi * (1 - wj) * (1 - wk) * src[a00 + i1] + wi * (1 - wj) * wk * src[a01 + i1] +
+          wi * wj * (1 - wk) * src[a10 + i1] + wi * wj * wk * src[a11 + i1];
+        out[o] = v * slope + inter;
+      }
+    }
+    if (performance.now() - last > 50) {
+      onProgress((z + 1) / nz); await sleep(0); last = performance.now();
+      if (signal?.aborted) throw new Cancelled();
+    }
+  }
+  onProgress(1);
+  return out;
+}
+
+// CT normalization + permutation (z,y,x) -> network order via transpose_forward.
+function normalizeForNetwork(hu, grid, manifest) {
+  const n = manifest.preprocessing.normalization;
+  const [nx, ny, nz] = grid.size;
+  const zyxDims = [nz, ny, nx];
+  const tf = manifest.preprocessing.transposeForward;
+  const netDims = tf.map((a) => zyxDims[a]);
+  const out = new Float32Array(hu.length);
+  const meanF = Math.fround(n.mean), stdF = Math.fround(Math.max(n.std, 1e-8));
+  // stride of each zyx axis in the source, reordered to network axes
+  const zyxStride = [ny * nx, nx, 1];
+  const s = tf.map((a) => zyxStride[a]);
+  let o = 0;
+  for (let a = 0; a < netDims[0]; a++) for (let b = 0; b < netDims[1]; b++) {
+    let src = a * s[0] + b * s[1];
+    for (let c = 0; c < netDims[2]; c++, src += s[2]) {
+      let v = hu[src]; v = v < n.clipLow ? n.clipLow : v > n.clipHigh ? n.clipHigh : v;
+      out[o++] = Math.fround(Math.fround(v - meanF) / stdF);
+    }
+  }
+  return { data: out, dims: netDims };
+}
+
+// labels in network order -> (z,y,x)
+function networkToZYX(arr, netDims, manifest, Type = Uint8Array) {
+  const tf = manifest.preprocessing.transposeForward;
+  const zyxDims = [0, 0, 0]; tf.forEach((a, i) => { zyxDims[a] = netDims[i]; });
+  const out = new Type(arr.length);
+  const zyxStride = [zyxDims[1] * zyxDims[2], zyxDims[2], 1];
+  const s = tf.map((a) => zyxStride[a]);
+  let i = 0;
+  for (let a = 0; a < netDims[0]; a++) for (let b = 0; b < netDims[1]; b++) {
+    let dst = a * s[0] + b * s[1];
+    for (let c = 0; c < netDims[2]; c++, dst += s[2]) out[dst] = arr[i++];
+  }
+  return out;
+}
+
+// ------------------------------------------------------------- NIfTI
+async function gunzipIfNeeded(buf) {
+  const u8 = new Uint8Array(buf);
+  if (u8[0] !== 0x1f || u8[1] !== 0x8b) return buf;
+  const ds = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return await new Response(ds).arrayBuffer();
+}
+
+async function readNifti(file) {
+  const buf = await gunzipIfNeeded(await file.arrayBuffer());
+  const dv = new DataView(buf);
+  let le = true;
+  if (dv.getInt32(0, true) !== 348) {
+    if (dv.getInt32(0, false) === 348) le = false;
+    else if (dv.getInt32(0, true) === 540 || dv.getInt32(0, false) === 540) throw new UserError('NIFTI2', 'NIfTI-2 形式には未対応です。');
+    else throw new UserError('NOT_NIFTI', 'NIfTI ファイルとして読めませんでした。');
+  }
+  const dim = [...Array(8)].map((_, i) => dv.getInt16(40 + 2 * i, le));
+  const datatype = dv.getInt16(70, le);
+  const pixdim = [...Array(8)].map((_, i) => dv.getFloat32(76 + 4 * i, le));
+  const voxOffset = Math.max(352, Math.round(dv.getFloat32(108, le)));
+  let slope = dv.getFloat32(112, le), inter = dv.getFloat32(116, le);
+  if (!slope || !Number.isFinite(slope)) { slope = 1; inter = 0; }
+  if (!Number.isFinite(inter)) inter = 0;
+  const qcode = dv.getInt16(252, le), scode = dv.getInt16(254, le);
+  const [ni, nj, nk] = [dim[1], Math.max(1, dim[2]), Math.max(1, dim[3])];
+  if (dim[0] < 3 || nk < 2) throw new UserError('NOT_3D', '3D の CT ボリュームが必要です。');
+  let ras;
+  if (scode > 0) {
+    ras = [];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) ras.push(dv.getFloat32(280 + 16 * r + 4 * c, le));
+    ras.push(0, 0, 0, 1);
+  } else if (qcode > 0) {
+    const b = dv.getFloat32(256, le), c = dv.getFloat32(260, le), d = dv.getFloat32(264, le);
+    const a = Math.sqrt(Math.max(0, 1 - b * b - c * c - d * d));
+    const R = [[a * a + b * b - c * c - d * d, 2 * (b * c - a * d), 2 * (b * d + a * c)],
+      [2 * (b * c + a * d), a * a + c * c - b * b - d * d, 2 * (c * d - a * b)],
+      [2 * (b * d - a * c), 2 * (c * d + a * b), a * a + d * d - b * b - c * c]];
+    const qfac = pixdim[0] < 0 ? -1 : 1;
+    const s = [pixdim[1], pixdim[2], pixdim[3] * qfac];
+    const off = [dv.getFloat32(268, le), dv.getFloat32(272, le), dv.getFloat32(276, le)];
+    ras = [];
+    for (let r = 0; r < 3; r++) ras.push(R[r][0] * s[0], R[r][1] * s[1], R[r][2] * s[2], off[r]);
+    ras.push(0, 0, 0, 1);
+  } else {
+    ras = [pixdim[1] || 1, 0, 0, 0, 0, pixdim[2] || 1, 0, 0, 0, 0, pixdim[3] || 1, 0, 0, 0, 0, 1];
+  }
+  const affine = ras.map((v, i) => (i < 8 ? -v : v)); // RAS -> LPS (negate x and y rows)
+  const types = { 2: Uint8Array, 4: Int16Array, 8: Int32Array, 16: Float32Array, 64: Float64Array, 256: Int8Array, 512: Uint16Array, 768: Uint32Array };
+  const T = types[datatype];
+  if (!T) throw new UserError('NIFTI_TYPE', `NIfTI のデータ型 ${datatype} には未対応です。`);
+  const n = ni * nj * nk;
+  let data;
+  if (le && voxOffset % T.BYTES_PER_ELEMENT === 0) data = new T(buf, voxOffset, n);
+  else {
+    data = new T(n); const bpe = T.BYTES_PER_ELEMENT; const getter = 'get' + T.name.replace('Array', '');
+    for (let i = 0; i < n; i++) data[i] = dv[getter](voxOffset + i * bpe, le);
+  }
+  if (T === Float64Array || T === Int32Array || T === Uint32Array) data = Float32Array.from(data);
+  return { data, dims: [ni, nj, nk], affine, slope, intercept: inter, name: file.name, source: 'NIfTI',
+    info: { spacing: [pixdim[1], pixdim[2], pixdim[3]].map((v) => +v.toFixed(4)) } };
+}
+
+// ------------------------------------------------------------- DICOM
+const TAG = {
+  TransferSyntax: 0x00020010, SOPClass: 0x00080016, SOPInstance: 0x00080018, Modality: 0x00080060,
+  SeriesDescription: 0x0008103e, ImageType: 0x00080008, SliceThickness: 0x00180050, SpacingBetweenSlices: 0x00180088,
+  SeriesUID: 0x0020000e, SeriesNumber: 0x00200011, InstanceNumber: 0x00200013, IPP: 0x00200032, IOP: 0x00200037,
+  FrameOfReference: 0x00200052, SamplesPerPixel: 0x00280002, Photometric: 0x00280004, NumberOfFrames: 0x00280008,
+  Rows: 0x00280010, Columns: 0x00280011, PixelSpacing: 0x00280030, BitsAllocated: 0x00280100, BitsStored: 0x00280101,
+  PixelRepresentation: 0x00280103, WindowCenter: 0x00281050, WindowWidth: 0x00281051, RescaleIntercept: 0x00281052,
+  RescaleSlope: 0x00281053, ModalityLUTSeq: 0x00283000, SharedFG: 0x52009229, PerFrameFG: 0x52009230,
+  PlanePositionSeq: 0x00209113, PlaneOrientationSeq: 0x00209116, PixelMeasuresSeq: 0x00289110,
+  PixelValueTransformSeq: 0x00289145, PixelData: 0x7fe00010,
+};
+const SQ_TAGS = new Set([TAG.ModalityLUTSeq, TAG.SharedFG, TAG.PerFrameFG, TAG.PlanePositionSeq, TAG.PlaneOrientationSeq,
+  TAG.PixelMeasuresSeq, TAG.PixelValueTransformSeq]);
+const US_TAGS = new Set([TAG.SamplesPerPixel, TAG.Rows, TAG.Columns, TAG.BitsAllocated, TAG.BitsStored, TAG.PixelRepresentation]);
+const LONG_VR = new Set(['OB', 'OD', 'OF', 'OL', 'OV', 'OW', 'SQ', 'SV', 'UC', 'UN', 'UR', 'UT', 'UV']);
+const TS_NAMES = {
+  '1.2.840.10008.1.2': 'Implicit VR LE', '1.2.840.10008.1.2.1': 'Explicit VR LE', '1.2.840.10008.1.2.1.99': 'Deflated',
+  '1.2.840.10008.1.2.2': 'Explicit VR BE', '1.2.840.10008.1.2.5': 'RLE', '1.2.840.10008.1.2.4.50': 'JPEG Baseline',
+  '1.2.840.10008.1.2.4.57': 'JPEG Lossless', '1.2.840.10008.1.2.4.70': 'JPEG Lossless SV1', '1.2.840.10008.1.2.4.80': 'JPEG-LS',
+  '1.2.840.10008.1.2.4.81': 'JPEG-LS near', '1.2.840.10008.1.2.4.90': 'JPEG 2000 LL', '1.2.840.10008.1.2.4.91': 'JPEG 2000',
+  '1.2.840.10008.1.2.4.201': 'HTJ2K LL', '1.2.840.10008.1.2.4.203': 'HTJ2K',
+};
+const TS_SUPPORTED = new Set(['1.2.840.10008.1.2', '1.2.840.10008.1.2.1', '1.2.840.10008.1.2.1.99', '1.2.840.10008.1.2.5']);
+
+class DicomDataset {
+  constructor(view, le, elements) { this.view = view; this.le = le; this.el = elements; }
+  has(tag) { return this.el.has(tag); }
+  bytes(tag) { const e = this.el.get(tag); return e && e.offset !== undefined ? new Uint8Array(this.view.buffer, this.view.byteOffset + e.offset, e.length) : null; }
+  str(tag) {
+    const b = this.bytes(tag); if (!b) return '';
+    let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return s.replace(/[\0\s]+$/, '').trim();
+  }
+  nums(tag) { const s = this.str(tag); return s ? s.split('\\').map((v) => parseFloat(v)) : []; }
+  num(tag, def = undefined) { const v = this.nums(tag)[0]; return Number.isFinite(v) ? v : def; }
+  us(tag, def = undefined) {
+    const e = this.el.get(tag); if (!e || e.length < 2) return def;
+    if (e.vr && e.vr !== 'US' && e.vr !== 'UN' && e.vr !== 'SS' && e.vr !== 'xs') { const v = this.num(tag); return v ?? def; }
+    return this.view.getUint16(e.offset, this.le);
+  }
+  seq(tag) { const e = this.el.get(tag); return e?.items ? e.items.map((m) => new DicomDataset(this.view, this.le, m)) : []; }
+}
+
+function parseDicomBuffer(buffer) {
+  let view = new DataView(buffer);
+  let pos = 0;
+  const meta = new Map();
+  if (buffer.byteLength > 132 && view.getUint32(128, false) === 0x4449434d) {
+    pos = 132;
+    // file meta group: explicit VR little endian
+    while (pos + 8 <= buffer.byteLength && view.getUint16(pos, true) === 0x0002) pos = readElement(view, pos, true, true, meta, buffer.byteLength);
+  }
+  const metaDs = new DicomDataset(view, true, meta);
+  const ts = metaDs.str(TAG.TransferSyntax) || '1.2.840.10008.1.2';
+  if (ts === '1.2.840.10008.1.2.2') throw new UserError('BIG_ENDIAN', 'Big Endian の DICOM には未対応です。');
+  const explicit = ts !== '1.2.840.10008.1.2';
+  const el = new Map(meta);
+  if (!metaDs.has(TAG.TransferSyntax)) {
+    // no meta: guess explicit vs implicit from the first element's VR bytes
+    const vr = String.fromCharCode(view.getUint8(pos + 4), view.getUint8(pos + 5));
+    const exp = /^[A-Z]{2}$/.test(vr);
+    readDataset(view, pos, buffer.byteLength, exp, true, el);
+    return { ds: new DicomDataset(view, true, el), ts: exp ? '1.2.840.10008.1.2.1' : '1.2.840.10008.1.2', deflated: false };
+  }
+  if (ts === '1.2.840.10008.1.2.1.99') return { ds: null, ts, deflated: true, deflateFrom: pos, meta };
+  readDataset(view, pos, buffer.byteLength, explicit, true, el);
+  return { ds: new DicomDataset(view, true, el), ts };
+}
+
+async function parseDicom(buffer) {
+  const r = parseDicomBuffer(buffer);
+  if (!r.deflated) return r;
+  const body = new Blob([buffer.slice(r.deflateFrom)]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  const inflated = await new Response(body).arrayBuffer();
+  const view = new DataView(inflated); const el = new Map();
+  readDataset(view, 0, inflated.byteLength, true, true, el);
+  return { ds: new DicomDataset(view, true, el), ts: '1.2.840.10008.1.2.1' };
+}
+
+function readDataset(view, pos, end, explicit, le, out) {
+  while (pos + 8 <= end) {
+    const tag = ((view.getUint16(pos, le) << 16) | view.getUint16(pos + 2, le)) >>> 0;
+    if (tag === 0xfffee00d) return pos + 8; // item delimitation
+    if (tag === 0xfffee0dd) return pos + 8;
+    pos = readElement(view, pos, explicit, le, out, end);
+  }
+  return pos;
+}
+
+function readElement(view, pos, explicit, le, out, end) {
+  const group = view.getUint16(pos, le);
+  const tag = ((group << 16) | view.getUint16(pos + 2, le)) >>> 0;
+  pos += 4;
+  let vr, len;
+  if (explicit && group !== 0xfffe) {
+    vr = String.fromCharCode(view.getUint8(pos), view.getUint8(pos + 1)); pos += 2;
+    if (LONG_VR.has(vr)) { len = view.getUint32(pos + 2, le); pos += 6; } else { len = view.getUint16(pos, le); pos += 2; }
+  } else {
+    vr = SQ_TAGS.has(tag) ? 'SQ' : US_TAGS.has(tag) ? 'US' : tag === TAG.PixelData ? 'OW' : 'xs';
+    len = view.getUint32(pos, le); pos += 4;
+  }
+  if (tag === TAG.PixelData) {
+    if (len === 0xffffffff) {
+      const frags = [];
+      while (pos + 8 <= end) {
+        const t = ((view.getUint16(pos, le) << 16) | view.getUint16(pos + 2, le)) >>> 0;
+        const l = view.getUint32(pos + 4, le); pos += 8;
+        if (t === 0xfffee0dd) break;
+        frags.push({ offset: pos, length: l }); pos += l;
+      }
+      out.set(tag, { vr, encapsulated: true, fragments: frags });
+    } else { out.set(tag, { vr, offset: pos, length: len }); pos += len; }
+    return pos;
+  }
+  if (vr === 'SQ' || (len === 0xffffffff && !explicit)) {
+    const items = [];
+    const seqEnd = len === 0xffffffff ? end : Math.min(end, pos + len);
+    while (pos + 8 <= seqEnd) {
+      const t = ((view.getUint16(pos, le) << 16) | view.getUint16(pos + 2, le)) >>> 0;
+      const l = view.getUint32(pos + 4, le); pos += 8;
+      if (t === 0xfffee0dd) break;
+      if (t !== 0xfffee000) break;
+      const item = new Map();
+      if (l === 0xffffffff) pos = readDataset(view, pos, seqEnd, explicit, le, item);
+      else { readDataset(view, pos, pos + l, explicit, le, item); pos += l; }
+      items.push(item);
+    }
+    if (len !== 0xffffffff) pos = seqEnd;
+    out.set(tag, { vr: 'SQ', items });
+    return pos;
+  }
+  if (len === 0xffffffff) throw new Error('undefined length element');
+  out.set(tag, { vr, offset: pos, length: len });
+  return pos + len;
+}
+
+function decodeRLE(bytes, rows, cols, bitsAllocated) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const nseg = dv.getUint32(0, true); const n = rows * cols;
+  const bpp = bitsAllocated / 8;
+  if (nseg !== bpp) throw new UserError('RLE', 'RLE の構成に未対応です。');
+  const out = new Uint8Array(n * bpp);
+  for (let s = 0; s < nseg; s++) {
+    const start = dv.getUint32(4 + 4 * s, true);
+    const stop = s + 1 < nseg ? dv.getUint32(8 + 4 * s, true) : bytes.length;
+    const byteIndex = bpp - 1 - s; // segment 0 holds the most significant byte
+    let i = start, o = 0;
+    while (i < stop && o < n) {
+      const h = (bytes[i++] << 24) >> 24;
+      if (h >= 0) { for (let k = 0; k <= h && o < n; k++) out[(o++) * bpp + byteIndex] = bytes[i++]; }
+      else if (h !== -128) { const v = bytes[i++]; for (let k = 0; k < 1 - h && o < n; k++) out[(o++) * bpp + byteIndex] = v; }
+    }
+  }
+  return out;
+}
+
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+// Pass 1: index files into series (headers only; pixel bytes are read again on load).
+async function indexDicomFiles(files, onProgress = () => {}) {
+  const series = new Map(); const skipped = [];
+  let i = 0;
+  for (const file of files) {
+    i++;
+    if (i % 20 === 0) { onProgress(i / files.length); await sleep(0); }
+    if (file.size < 132) { skipped.push({ name: file.name, reason: 'too small' }); continue; }
+    let parsed;
+    try { parsed = await parseDicom(await file.arrayBuffer()); }
+    catch (e) { skipped.push({ name: file.name, reason: e.message }); continue; }
+    const ds = parsed.ds;
+    if (!ds.has(TAG.PixelData) || !ds.has(TAG.Rows)) { skipped.push({ name: file.name, reason: 'no image' }); continue; }
+    const rows = ds.us(TAG.Rows), cols = ds.us(TAG.Columns);
+    const frames = Math.max(1, ds.num(TAG.NumberOfFrames, 1) | 0);
+    const iop = frameIOP(ds);
+    const uid = ds.str(TAG.SeriesUID) || 'unknown';
+    const key = `${uid}|${rows}x${cols}|${frames > 1 ? 'mf:' + ds.str(TAG.SOPInstance) : (iop || []).map((v) => v.toFixed(3)).join(',')}`;
+    if (!series.has(key)) series.set(key, {
+      key, uid, description: ds.str(TAG.SeriesDescription) || '(説明なし)', modality: ds.str(TAG.Modality) || '?',
+      number: ds.num(TAG.SeriesNumber, 0), rows, cols, ts: parsed.ts, frames: 0, items: [],
+    });
+    const s = series.get(key);
+    s.items.push({ file, frames, instance: ds.num(TAG.InstanceNumber, 0) });
+    s.frames += frames;
+  }
+  onProgress(1);
+  const list = [...series.values()].sort((a, b) => b.frames - a.frames);
+  for (const s of list) {
+    s.supported = TS_SUPPORTED.has(s.ts);
+    s.tsName = TS_NAMES[s.ts] || s.ts;
+  }
+  return { series: list, skipped };
+}
+
+function frameIOP(ds, perFrame) {
+  const pick = (d) => { const v = d.nums(TAG.IOP); return v.length === 6 && v.every(Number.isFinite) ? v : null; };
+  if (perFrame) { const po = perFrame.seq(TAG.PlaneOrientationSeq)[0]; if (po && pick(po)) return pick(po); }
+  const sh = ds.seq(TAG.SharedFG)[0];
+  if (sh) { const po = sh.seq(TAG.PlaneOrientationSeq)[0]; if (po && pick(po)) return pick(po); }
+  return pick(ds);
+}
+function framePixelSpacing(ds, perFrame) {
+  const pick = (d) => { const v = d.nums(TAG.PixelSpacing); return v.length >= 2 && v[0] > 0 && v[1] > 0 ? v.slice(0, 2) : null; };
+  for (const src of [perFrame, ds.seq(TAG.SharedFG)[0]]) { const pm = src?.seq(TAG.PixelMeasuresSeq)[0]; if (pm && pick(pm)) return pick(pm); }
+  return pick(ds);
+}
+function frameRescale(ds, perFrame) {
+  for (const src of [perFrame, ds.seq(TAG.SharedFG)[0]]) {
+    const pv = src?.seq(TAG.PixelValueTransformSeq)[0];
+    if (pv && pv.has(TAG.RescaleSlope)) return [pv.num(TAG.RescaleSlope, 1), pv.num(TAG.RescaleIntercept, 0)];
+  }
+  return [ds.num(TAG.RescaleSlope, 1) || 1, ds.num(TAG.RescaleIntercept, 0)];
+}
+
+function decodeFramePixels(ds, ts, frameIndex, nFrames) {
+  const rows = ds.us(TAG.Rows), cols = ds.us(TAG.Columns), ba = ds.us(TAG.BitsAllocated, 16);
+  const bs = ds.us(TAG.BitsStored, ba), signed = ds.us(TAG.PixelRepresentation, 0) === 1;
+  const spp = ds.us(TAG.SamplesPerPixel, 1);
+  if (spp !== 1) throw new UserError('COLOR', 'カラー画像は CT として扱えません。');
+  const pd = ds.el.get(TAG.PixelData);
+  const n = rows * cols, bpp = ba / 8;
+  let bytes;
+  if (pd.encapsulated) {
+    let frags = pd.fragments.slice(1);
+    let data;
+    if (nFrames === 1) {
+      const tot = frags.reduce((a, f) => a + f.length, 0); data = new Uint8Array(tot); let o = 0;
+      for (const f of frags) { data.set(new Uint8Array(ds.view.buffer, ds.view.byteOffset + f.offset, f.length), o); o += f.length; }
+    } else {
+      if (frags.length !== nFrames) throw new UserError('FRAGMENTS', '圧縮マルチフレームの断片構成に未対応です。');
+      const f = frags[frameIndex]; data = new Uint8Array(ds.view.buffer, ds.view.byteOffset + f.offset, f.length);
+    }
+    if (ts !== '1.2.840.10008.1.2.5') throw new UserError('CODEC', `圧縮形式 ${TS_NAMES[ts] || ts} には未対応です。非圧縮 DICOM か NIfTI に変換してください。`);
+    bytes = decodeRLE(data, rows, cols, ba);
+  } else {
+    const start = ds.view.byteOffset + pd.offset + frameIndex * n * bpp;
+    bytes = new Uint8Array(ds.view.buffer, start, n * bpp);
+  }
+  const out = new Int32Array(n);
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (ba === 16) {
+    for (let i = 0; i < n; i++) {
+      let v = dv.getUint16(i * 2, true);
+      if (bs < 16) v &= (1 << bs) - 1;
+      if (signed && v & (1 << (bs - 1))) v -= 1 << bs;
+      out[i] = v;
+    }
+  } else if (ba === 8) {
+    for (let i = 0; i < n; i++) { let v = bytes[i]; if (signed && v & 0x80) v -= 256; out[i] = v; }
+  } else if (ba === 32) {
+    for (let i = 0; i < n; i++) out[i] = signed ? dv.getInt32(i * 4, true) : dv.getUint32(i * 4, true);
+  } else throw new UserError('BITS', `BitsAllocated=${ba} には未対応です。`);
+  return out;
+}
+
+// Pass 2: decode a series into a regular, physically placed volume.
+async function loadDicomSeries(series, onProgress = () => {}, signal) {
+  if (!series.supported) throw new UserError('CODEC', `圧縮形式 ${series.tsName} には未対応です。非圧縮 DICOM か NIfTI に変換してください。`);
+  const frames = []; // {ds, ts, index, n, ipp, iop, ps, rescale}
+  const warnings = [];
+  let k = 0;
+  for (const item of series.items) {
+    if (signal?.aborted) throw new Cancelled();
+    const { ds, ts } = await parseDicom(await item.file.arrayBuffer());
+    if (item.frames === 1) {
+      frames.push({ ds, ts, index: 0, n: 1, ipp: ds.nums(TAG.IPP), iop: frameIOP(ds), ps: framePixelSpacing(ds), rescale: frameRescale(ds) });
+    } else {
+      const per = ds.seq(TAG.PerFrameFG);
+      for (let f = 0; f < item.frames; f++) {
+        const pf = per[f];
+        const pp = pf?.seq(TAG.PlanePositionSeq)[0];
+        frames.push({ ds, ts, index: f, n: item.frames, ipp: pp ? pp.nums(TAG.IPP) : null, iop: frameIOP(ds, pf), ps: framePixelSpacing(ds, pf), rescale: frameRescale(ds, pf), mf: true });
+      }
+    }
+    k++; if (k % 10 === 0) { onProgress(0.3 * k / series.items.length); await sleep(0); }
+  }
+  const f0 = frames[0];
+  if (!f0.iop) throw new UserError('MISSING_GEOMETRY', '画像の向き（ImageOrientationPatient）がありません。');
+  if (!f0.ps) throw new UserError('MISSING_GEOMETRY', 'ピクセル間隔（PixelSpacing）がありません。');
+  const X = f0.iop.slice(0, 3), Y = f0.iop.slice(3, 6), N = cross(X, Y);
+  for (const f of frames) {
+    if (!f.iop || f.iop.some((v, i) => Math.abs(v - f0.iop[i]) > 1e-3)) throw new UserError('MIXED_GEOMETRY', 'シリーズ内で画像の向きが一致しません。');
+    if (!f.ps || Math.abs(f.ps[0] - f0.ps[0]) > 1e-4 || Math.abs(f.ps[1] - f0.ps[1]) > 1e-4) throw new UserError('MIXED_GEOMETRY', 'シリーズ内でピクセル間隔が一致しません。');
+  }
+  // positions: per-frame IPP, or a single IPP + slice spacing for multi-frame without per-frame geometry
+  if (frames.some((f) => !f.ipp || f.ipp.length !== 3)) {
+    const ds = f0.ds; const ipp = ds.nums(TAG.IPP);
+    const sp = ds.num(TAG.SpacingBetweenSlices) || ds.num(TAG.SliceThickness) ||
+      ds.seq(TAG.SharedFG)[0]?.seq(TAG.PixelMeasuresSeq)[0]?.num(TAG.SliceThickness);
+    if (!(ipp.length === 3 && sp > 0)) throw new UserError('MISSING_GEOMETRY', 'スライス位置（ImagePositionPatient）を決められません。');
+    frames.forEach((f, i) => { f.ipp = [0, 1, 2].map((d) => ipp[d] + N[d] * sp * i); });
+    warnings.push(`フレームごとの位置情報がないため、スライス間隔 ${sp} mm を仮定しました。`);
+  }
+  for (const f of frames) f.pos = dot3(f.ipp, N);
+  frames.sort((a, b) => a.pos - b.pos);
+  for (let i = 1; i < frames.length; i++) {
+    if (Math.abs(frames[i].pos - frames[i - 1].pos) < 1e-4) throw new UserError('DUPLICATE_SLICE', '同じ位置のスライスが重複しています。');
+  }
+  if (frames.length < 2) throw new UserError('SINGLE_SLICE', '3D の CT には 2 枚以上のスライスが必要です。');
+  const gaps = frames.slice(1).map((f, i) => f.pos - frames[i].pos);
+  const med = [...gaps].sort((a, b) => a - b)[gaps.length >> 1];
+  if (gaps.some((g) => Math.abs(g - med) > 0.05 * med + 0.01)) throw new UserError('IRREGULAR_STACK', 'スライス間隔が不規則、または欠けたスライスがあります。');
+  const nk = frames.length, first = frames[0].ipp, lastP = frames[nk - 1].ipp;
+  const S = [0, 1, 2].map((d) => (lastP[d] - first[d]) / (nk - 1));
+  const tilt = Math.acos(Math.min(1, Math.abs(dot3(S, N)) / Math.hypot(...S))) * 180 / Math.PI;
+  if (tilt > 0.5) warnings.push(`ガントリー傾斜（約 ${tilt.toFixed(1)}°）を物理座標で補正しました。`);
+  const rows = f0.ds.us(TAG.Rows), cols = f0.ds.us(TAG.Columns);
+  const [rs, cs] = f0.ps; // PixelSpacing = [row spacing (along Y), column spacing (along X)]
+  const affine = [
+    X[0] * cs, Y[0] * rs, S[0], first[0],
+    X[1] * cs, Y[1] * rs, S[1], first[1],
+    X[2] * cs, Y[2] * rs, S[2], first[2],
+    0, 0, 0, 1];
+  // pixel values: keep integers when one rescale applies to all frames
+  const sameRescale = frames.every((f) => f.rescale[0] === f0.rescale[0] && f.rescale[1] === f0.rescale[1]);
+  const plane = rows * cols;
+  let data = sameRescale ? new Int16Array(plane * nk) : new Float32Array(plane * nk);
+  let overflow = false;
+  for (let z = 0; z < nk; z++) {
+    if (signal?.aborted) throw new Cancelled();
+    const f = frames[z];
+    const px = decodeFramePixels(f.ds, f.ts, f.index, f.n);
+    if (sameRescale) {
+      if (!overflow) for (let i = 0; i < plane; i++) { const v = px[i]; if (v < -32768 || v > 32767) { overflow = true; break; } }
+      if (overflow && data instanceof Int16Array) { const fl = new Float32Array(plane * nk); fl.set(data.subarray(0, z * plane)); data = fl; }
+      data.set(px, z * plane);
+    } else {
+      const [s, b] = f.rescale; for (let i = 0; i < plane; i++) data[z * plane + i] = px[i] * s + b;
+    }
+    if (z % 8 === 0) { onProgress(0.3 + 0.7 * z / nk); await sleep(0); }
+  }
+  const [slope, intercept] = sameRescale ? f0.rescale : [1, 0];
+  const ds = f0.ds;
+  if ((series.modality || '').toUpperCase() !== 'CT') warnings.push(`Modality が ${series.modality} です。CT として処理します。`);
+  const wc = ds.num(TAG.WindowCenter), ww = ds.num(TAG.WindowWidth);
+  onProgress(1);
+  return {
+    data, dims: [cols, rows, nk], affine, slope, intercept, source: 'DICOM', name: series.description,
+    warnings, window: ww > 0 ? { center: wc, width: ww } : null,
+    info: { spacing: [cs, rs, Math.hypot(...S)].map((v) => +v.toFixed(4)), transferSyntax: series.tsName },
+  };
+}
+
+// Collect files from a drop (folders included) or from an <input webkitdirectory>.
+async function filesFromDataTransfer(dt) {
+  const out = [];
+  const walk = async (entry) => {
+    if (entry.isFile) out.push(await new Promise((res, rej) => entry.file(res, rej)));
+    else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      for (;;) {
+        const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+        if (!batch.length) break;
+        for (const e of batch) await walk(e);
+      }
+    }
+  };
+  const entries = [...dt.items].map((it) => it.webkitGetAsEntry && it.webkitGetAsEntry()).filter(Boolean);
+  if (entries.length) { for (const e of entries) await walk(e); } else out.push(...dt.files);
+  return out;
+}
+
+// ------------------------------------------------------------- post-processing
+// Remove connected components (6-connectivity) smaller than minVoxels for the given
+// classes; removed voxels become background (Slicer Islands: REMOVE_SMALL_ISLANDS).
+async function removeSmallIslands(labels, dims, classes, minVoxels) {
+  const [nz, ny, nx] = dims, plane = nx * ny, n = labels.length;
+  const want = new Uint8Array(256); for (const c of classes) want[c] = 1;
+  const seen = new Uint8Array(n), q = new Int32Array(n);
+  const removed = {}; let last = performance.now();
+  for (let i = 0; i < n; i++) {
+    const c = labels[i];
+    if (!want[c] || seen[i]) continue;
+    let head = 0, tail = 0; q[tail++] = i; seen[i] = 1;
+    while (head < tail) {
+      const v = q[head++]; const x = v % nx, y = ((v - x) / nx) % ny, z = (v - x - y * nx) / plane;
+      if (x > 0 && !seen[v - 1] && labels[v - 1] === c) { seen[v - 1] = 1; q[tail++] = v - 1; }
+      if (x < nx - 1 && !seen[v + 1] && labels[v + 1] === c) { seen[v + 1] = 1; q[tail++] = v + 1; }
+      if (y > 0 && !seen[v - nx] && labels[v - nx] === c) { seen[v - nx] = 1; q[tail++] = v - nx; }
+      if (y < ny - 1 && !seen[v + nx] && labels[v + nx] === c) { seen[v + nx] = 1; q[tail++] = v + nx; }
+      if (z > 0 && !seen[v - plane] && labels[v - plane] === c) { seen[v - plane] = 1; q[tail++] = v - plane; }
+      if (z < nz - 1 && !seen[v + plane] && labels[v + plane] === c) { seen[v + plane] = 1; q[tail++] = v + plane; }
+    }
+    if (tail < minVoxels) { for (let k = 0; k < tail; k++) labels[q[k]] = 0; removed[c] = (removed[c] || 0) + tail; }
+    if (performance.now() - last > 60) { await sleep(0); last = performance.now(); }
+  }
+  return removed;
+}
+
+function labelCounts(labels, nc) { const c = new Array(nc).fill(0); for (let i = 0; i < labels.length; i++) c[labels[i]]++; return c; }
+
+// Naive surface nets on a signed field derived from the labels. With `margin`
+// (top1 - top2 averaged logits) the zero crossing is placed between voxel centres
+// in proportion to the model's confidence, giving sub-voxel boundaries.
+function surfaceNets(labels, margin, dims, cls, opts = {}) {
+  const [nz, ny, nx] = dims, plane = nx * ny;
+  const lo = [nx, ny, nz], hi = [-1, -1, -1];
+  for (let z = 0, i = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++, i++) {
+    if (labels[i] !== cls) continue;
+    if (x < lo[0]) lo[0] = x; if (x > hi[0]) hi[0] = x; if (y < lo[1]) lo[1] = y; if (y > hi[1]) hi[1] = y; if (z < lo[2]) lo[2] = z; if (z > hi[2]) hi[2] = z;
+  }
+  if (hi[0] < 0) return null;
+  const mMin = opts.marginMin ?? 0.05, mMax = opts.marginMax ?? 4;
+  const field = (x, y, z) => {
+    if (x < 0 || y < 0 || z < 0 || x >= nx || y >= ny || z >= nz) return -1;
+    const i = (z * ny + y) * nx + x;
+    let m = margin && opts.subvoxel !== false ? margin[i] : 1;
+    m = m < mMin ? mMin : m > mMax ? mMax : m;
+    return labels[i] === cls ? m : -m;
+  };
+  // local box with one voxel of padding; cell (i,j,k) has its min corner at voxel (x0+i-1, ...)
+  const x0 = lo[0] - 1, y0 = lo[1] - 1, z0 = lo[2] - 1;
+  const bx = hi[0] - lo[0] + 3, by = hi[1] - lo[1] + 3, bz = hi[2] - lo[2] + 3;
+  const F = new Float32Array(bx * by * bz);
+  for (let k = 0; k < bz; k++) for (let j = 0; j < by; j++) for (let i = 0; i < bx; i++) F[(k * by + j) * bx + i] = field(x0 + i, y0 + j, z0 + k);
+  const cellIndex = new Int32Array(bx * by * bz).fill(-1);
+  const verts = []; const tris = [];
+  const corner = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
+  const edges = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+  const fv = new Float32Array(8);
+  for (let k = 0; k < bz - 1; k++) for (let j = 0; j < by - 1; j++) for (let i = 0; i < bx - 1; i++) {
+    let mask = 0;
+    for (let c = 0; c < 8; c++) { const v = F[((k + corner[c][2]) * by + j + corner[c][1]) * bx + i + corner[c][0]]; fv[c] = v; if (v > 0) mask |= 1 << c; }
+    if (mask === 0 || mask === 255) continue;
+    let sx = 0, sy = 0, sz = 0, cnt = 0;
+    for (const [a, b] of edges) {
+      if ((fv[a] > 0) === (fv[b] > 0)) continue;
+      const t = fv[a] / (fv[a] - fv[b]);
+      sx += corner[a][0] + t * (corner[b][0] - corner[a][0]);
+      sy += corner[a][1] + t * (corner[b][1] - corner[a][1]);
+      sz += corner[a][2] + t * (corner[b][2] - corner[a][2]); cnt++;
+    }
+    cellIndex[(k * by + j) * bx + i] = verts.length / 3;
+    verts.push(x0 + i + sx / cnt, y0 + j + sy / cnt, z0 + k + sz / cnt);
+  }
+  // faces: for each lattice edge with a sign change, connect the 4 surrounding cells
+  const S = [1, bx, bx * by];
+  const B = [bx, by, bz];
+  for (let k = 0; k < bz; k++) for (let j = 0; j < by; j++) for (let i = 0; i < bx; i++) {
+    const p = (k * by + j) * bx + i; const inside = F[p] > 0;
+    const pc = [i, j, k];
+    for (let a = 0; a < 3; a++) {
+      const b = (a + 1) % 3, c = (a + 2) % 3;
+      if (pc[a] + 1 >= B[a] || pc[b] < 1 || pc[c] < 1) continue;
+      if ((F[p + S[a]] > 0) === inside) continue;
+      // cells whose min corner is p, p-e_b, p-e_c, p-e_b-e_c (cell index = min-corner voxel index)
+      const c00 = p - S[b] - S[c], c10 = p - S[c], c11 = p, c01 = p - S[b];
+      const v0 = cellIndex[c00], v1 = cellIndex[c10], v2 = cellIndex[c11], v3 = cellIndex[c01];
+      if (v0 < 0 || v1 < 0 || v2 < 0 || v3 < 0) continue;
+      if (inside) tris.push(v0, v1, v2, v0, v2, v3); else tris.push(v0, v2, v1, v0, v3, v2);
+    }
+  }
+  return { positions: new Float32Array(verts), indices: new Uint32Array(tris) };
+}
+
+function taubinSmooth(mesh, iterations = 10, lambda = 0.5, mu = -0.53) {
+  if (!iterations) return mesh;
+  const P = mesh.positions, I = mesh.indices, nv = P.length / 3;
+  const deg = new Int32Array(nv + 1);
+  for (let t = 0; t < I.length; t += 3) { deg[I[t]] += 2; deg[I[t + 1]] += 2; deg[I[t + 2]] += 2; }
+  const start = new Int32Array(nv + 1); for (let v = 0; v < nv; v++) start[v + 1] = start[v] + deg[v];
+  const nb = new Int32Array(start[nv]); const fill = start.slice(0, nv);
+  for (let t = 0; t < I.length; t += 3) {
+    const a = I[t], b = I[t + 1], c = I[t + 2];
+    nb[fill[a]++] = b; nb[fill[a]++] = c; nb[fill[b]++] = a; nb[fill[b]++] = c; nb[fill[c]++] = a; nb[fill[c]++] = b;
+  }
+  const tmp = new Float32Array(P.length);
+  const step = (f) => {
+    for (let v = 0; v < nv; v++) {
+      const s = start[v], e = start[v + 1]; if (e === s) { tmp[3 * v] = P[3 * v]; tmp[3 * v + 1] = P[3 * v + 1]; tmp[3 * v + 2] = P[3 * v + 2]; continue; }
+      let ax = 0, ay = 0, az = 0;
+      for (let q = s; q < e; q++) { const u = nb[q] * 3; ax += P[u]; ay += P[u + 1]; az += P[u + 2]; }
+      const inv = 1 / (e - s);
+      tmp[3 * v] = P[3 * v] + f * (ax * inv - P[3 * v]); tmp[3 * v + 1] = P[3 * v + 1] + f * (ay * inv - P[3 * v + 1]); tmp[3 * v + 2] = P[3 * v + 2] + f * (az * inv - P[3 * v + 2]);
+    }
+    P.set(tmp);
+  };
+  for (let it = 0; it < iterations; it++) { step(lambda); step(mu); }
+  return mesh;
+}
+
+// voxel (x,y,z) of the identity-direction grid -> patient LPS mm (in place)
+function meshToPatient(mesh, grid) {
+  const P = mesh.positions;
+  for (let i = 0; i < P.length; i += 3) for (let d = 0; d < 3; d++) P[i + d] = grid.origin[d] + P[i + d] * grid.spacing[d];
+  return mesh;
+}
+
+function vertexNormals(mesh) {
+  const P = mesh.positions, I = mesh.indices, N = new Float32Array(P.length);
+  for (let t = 0; t < I.length; t += 3) {
+    const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
+    const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
+    const vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    for (const o of [a, b, c]) { N[o] += nx; N[o + 1] += ny; N[o + 2] += nz; }
+  }
+  for (let i = 0; i < N.length; i += 3) { const l = Math.hypot(N[i], N[i + 1], N[i + 2]) || 1; N[i] /= l; N[i + 1] /= l; N[i + 2] /= l; }
+  return N;
+}
+
+// Binary STL; coordinates in patient LPS (default) or RAS millimetres.
+function meshToSTL(mesh, name, coords = 'LPS') {
+  const P = mesh.positions, I = mesh.indices, nt = I.length / 3;
+  const buf = new ArrayBuffer(84 + 50 * nt), dv = new DataView(buf);
+  const header = `${name} | ${coords} mm | CT Segment WebGPU | research use only`.slice(0, 80);
+  for (let i = 0; i < header.length; i++) dv.setUint8(i, header.charCodeAt(i) & 0x7f);
+  dv.setUint32(80, nt, true);
+  const sx = coords === 'RAS' ? -1 : 1;
+  let o = 84;
+  for (let t = 0; t < nt; t++) {
+    const a = I[3 * t] * 3, b = I[3 * t + 1] * 3, c = I[3 * t + 2] * 3;
+    const A = [P[a] * sx, P[a + 1] * sx, P[a + 2]], B = [P[b] * sx, P[b + 1] * sx, P[b + 2]], C = [P[c] * sx, P[c + 1] * sx, P[c + 2]];
+    // mirroring two axes keeps handedness, so the winding stays outward
+    const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], v = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+    const n = cross(u, v); const l = Math.hypot(...n) || 1;
+    dv.setFloat32(o, n[0] / l, true); dv.setFloat32(o + 4, n[1] / l, true); dv.setFloat32(o + 8, n[2] / l, true); o += 12;
+    for (const V of [A, B, C]) { dv.setFloat32(o, V[0], true); dv.setFloat32(o + 4, V[1], true); dv.setFloat32(o + 8, V[2], true); o += 12; }
+    dv.setUint16(o, 0, true); o += 2;
+  }
+  return new Blob([buf], { type: 'model/stl' });
+}
+
+// NIfTI-1 label map on the processing grid (RAS sform), for Slicer / ITK-SNAP.
+function labelsToNifti(labels, grid) {
+  const [nx, ny, nz] = grid.size; const hdr = new ArrayBuffer(352); const dv = new DataView(hdr);
+  dv.setInt32(0, 348, true);
+  [3, nx, ny, nz, 1, 1, 1, 1].forEach((v, i) => dv.setInt16(40 + 2 * i, v, true));
+  dv.setInt16(70, 2, true); dv.setInt16(72, 8, true);
+  [1, ...grid.spacing, 1, 1, 1, 1].forEach((v, i) => dv.setFloat32(76 + 4 * i, v, true));
+  dv.setFloat32(108, 352, true); dv.setFloat32(112, 1, true); dv.setUint8(123, 10);
+  dv.setInt16(252, 0, true); dv.setInt16(254, 2, true);
+  const [ox, oy, oz] = grid.origin, [tx, ty, tz] = grid.spacing;
+  const srow = [[-tx, 0, 0, -ox], [0, -ty, 0, -oy], [0, 0, tz, oz]];
+  srow.forEach((r, i) => r.forEach((v, j) => dv.setFloat32(280 + 16 * i + 4 * j, v, true)));
+  const magic = 'n+1\0'; for (let i = 0; i < 4; i++) dv.setUint8(344 + i, magic.charCodeAt(i));
+  return new Blob([hdr, labels], { type: 'application/octet-stream' });
+}
+
+// ------------------------------------------------------------- 2D slice views
+// Displays the processing grid (identity LPS, (z,y,x) arrays) in radiological
+// orientation: axial (R left, A top), coronal (R left, S top), sagittal (A left, S top).
+const WL_PRESETS = { bone: { center: 500, width: 2500 }, soft: { center: 40, width: 400 }, wide: { center: 1000, width: 4000 } };
+
+class SliceViews {
+  constructor(root, onCursor) {
+    this.views = ['axial', 'coronal', 'sagittal'].map((name) => {
+      const el = root.querySelector('#vp-' + name); const canvas = el.querySelector('canvas');
+      return { name, el, canvas, ctx: canvas.getContext('2d'), si: el.querySelector('.si'), off: document.createElement('canvas'), map: null };
+    });
+    this.onCursor = onCursor; this.window = { ...WL_PRESETS.bone }; this.alpha = 0.45;
+    this.hu = null; this.labels = null; this.colors = null; this.visible = null;
+    for (const v of this.views) {
+      const ro = new ResizeObserver(() => this.draw(v)); ro.observe(v.el); v.ro = ro;
+      let dragging = false;
+      v.canvas.addEventListener('pointerdown', (e) => { dragging = true; v.canvas.setPointerCapture(e.pointerId); this.pick(v, e); });
+      v.canvas.addEventListener('pointermove', (e) => { if (dragging) this.pick(v, e); });
+      v.canvas.addEventListener('pointerup', () => { dragging = false; });
+      v.canvas.addEventListener('wheel', (e) => { e.preventDefault(); this.scroll(v, Math.sign(e.deltaY) * (e.shiftKey ? 5 : 1)); }, { passive: false });
+    }
+  }
+  setVolume(hu, grid) {
+    this.hu = hu; this.grid = grid; this.labels = null;
+    const [nx, ny, nz] = grid.size; this.cursor = [nx >> 1, ny >> 1, nz >> 1];
+    this.drawAll();
+  }
+  setLabels(labels, colors, visible) { this.labels = labels; this.colors = colors; this.visible = visible; this.drawAll(); }
+  setWindow(w) { this.window = { ...w }; this.drawAll(); }
+  setAlpha(a) { this.alpha = a; this.drawAll(); }
+  drawAll() { for (const v of this.views) this.draw(v); }
+  // image axes for each view: [width axis, height axis, fixed axis, flipHeight]
+  axes(name) { return name === 'axial' ? [0, 1, 2, false] : name === 'coronal' ? [0, 2, 1, true] : [1, 2, 0, true]; }
+  scroll(v, d) {
+    if (!this.hu) return;
+    const [, , f] = this.axes(v.name);
+    this.cursor[f] = Math.max(0, Math.min(this.grid.size[f] - 1, this.cursor[f] - d));
+    this.drawAll(); this.onCursor?.(this.cursor);
+  }
+  pick(v, e) {
+    if (!v.map) return;
+    const r = v.canvas.getBoundingClientRect();
+    const px = (e.clientX - r.left) * devicePixelRatio, py = (e.clientY - r.top) * devicePixelRatio;
+    const [wa, ha, , flip] = this.axes(v.name); const m = v.map;
+    const ix = Math.floor((px - m.x) / m.sx), iy = Math.floor((py - m.y) / m.sy);
+    if (ix < 0 || iy < 0 || ix >= m.w || iy >= m.h) return;
+    this.cursor[wa] = ix; this.cursor[ha] = flip ? m.h - 1 - iy : iy;
+    this.drawAll(); this.onCursor?.(this.cursor);
+  }
+  draw(v) {
+    const dpr = devicePixelRatio || 1;
+    const W = Math.max(1, Math.round(v.el.clientWidth * dpr)), H = Math.max(1, Math.round(v.el.clientHeight * dpr));
+    if (v.canvas.width !== W || v.canvas.height !== H) { v.canvas.width = W; v.canvas.height = H; }
+    const ctx = v.ctx; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    if (!this.hu) { v.map = null; v.si.textContent = ''; return; }
+    const [nx, ny, nz] = this.grid.size, sp = this.grid.spacing;
+    const [wa, ha, fa, flip] = this.axes(v.name);
+    const w = this.grid.size[wa], h = this.grid.size[ha], fixed = this.cursor[fa];
+    if (v.off.width !== w || v.off.height !== h) { v.off.width = w; v.off.height = h; v.img = null; }
+    const octx = v.off.getContext('2d');
+    if (!v.img) v.img = octx.createImageData(w, h);
+    const px = v.img.data;
+    const lo = this.window.center - this.window.width / 2, sc = 255 / this.window.width;
+    const stride = [1, nx, nx * ny];
+    const lab = this.labels, col = this.colors, vis = this.visible, a = this.alpha;
+    for (let r = 0; r < h; r++) {
+      const hv = flip ? h - 1 - r : r;
+      let idx = fixed * stride[fa] + hv * stride[ha];
+      let o = r * w * 4;
+      for (let c = 0; c < w; c++, idx += stride[wa], o += 4) {
+        let g = (this.hu[idx] - lo) * sc; g = g < 0 ? 0 : g > 255 ? 255 : g;
+        let R = g, G = g, B = g;
+        if (lab) { const l = lab[idx]; if (l && vis[l]) { const k = col[l]; R = g * (1 - a) + k[0] * a; G = g * (1 - a) + k[1] * a; B = g * (1 - a) + k[2] * a; } }
+        px[o] = R; px[o + 1] = G; px[o + 2] = B; px[o + 3] = 255;
+      }
+    }
+    octx.putImageData(v.img, 0, 0);
+    // fit with physical aspect
+    const physW = w * sp[wa], physH = h * sp[ha];
+    const s = Math.min(W / physW, H / physH) * 0.98;
+    const dw = physW * s, dh = physH * s, x0 = (W - dw) / 2, y0 = (H - dh) / 2;
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(v.off, x0, y0, dw, dh);
+    v.map = { x: x0, y: y0, sx: dw / w, sy: dh / h, w, h };
+    // crosshair
+    ctx.strokeStyle = 'rgba(79,179,182,0.7)'; ctx.lineWidth = Math.max(1, dpr);
+    const cx = x0 + (this.cursor[wa] + 0.5) * v.map.sx;
+    const cyv = flip ? h - 1 - this.cursor[ha] : this.cursor[ha];
+    const cy = y0 + (cyv + 0.5) * v.map.sy;
+    ctx.beginPath(); ctx.moveTo(cx, y0); ctx.lineTo(cx, y0 + dh); ctx.moveTo(x0, cy); ctx.lineTo(x0 + dw, cy); ctx.stroke();
+    const mm = this.grid.origin[fa] + fixed * sp[fa];
+    v.si.textContent = `${fixed + 1}/${this.grid.size[fa]} · ${'LPS'[fa]} ${mm.toFixed(1)} mm`;
+  }
+}
+
+// ------------------------------------------------------------- 3D mesh view (WebGPU)
+const M4 = {
+  perspective(fovy, aspect, near, far) {
+    const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+    return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, far * nf, -1, 0, 0, far * near * nf, 0]);
+  },
+  lookAt(eye, target, up) {
+    const z = norm3(sub3(eye, target)), x = norm3(cross(up, z)), y = cross(z, x);
+    return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot3(x, eye), -dot3(y, eye), -dot3(z, eye), 1]);
+  },
+  mul(a, b) {
+    const o = new Float32Array(16);
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; }
+    return o;
+  },
+};
+const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const norm3 = (a) => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+
+const MESH_WGSL = `
+struct U { mvp: mat4x4<f32>, view: mat4x4<f32>, color: vec4<f32> };
+@group(0) @binding(0) var<uniform> u: U;
+struct VO { @builtin(position) pos: vec4<f32>, @location(0) n: vec3<f32>, @location(1) vp: vec3<f32> };
+@vertex fn vs(@location(0) p: vec3<f32>, @location(1) n: vec3<f32>) -> VO {
+  var o: VO; o.pos = u.mvp * vec4<f32>(p, 1.0);
+  o.n = (u.view * vec4<f32>(n, 0.0)).xyz; o.vp = (u.view * vec4<f32>(p, 1.0)).xyz; return o;
+}
+@fragment fn fs(i: VO, @builtin(front_facing) ff: bool) -> @location(0) vec4<f32> {
+  var n = normalize(i.n); if (!ff) { n = -n; }
+  let v = normalize(-i.vp);
+  let key = normalize(v + vec3<f32>(-0.35, 0.45, 0.0));
+  let diff = max(dot(n, key), 0.0) * 0.75 + max(dot(n, v), 0.0) * 0.25;
+  let spec = pow(max(dot(n, normalize(key + v)), 0.0), 48.0) * 0.18;
+  let rim = pow(1.0 - max(dot(n, v), 0.0), 3.0) * 0.12;
+  return vec4<f32>(u.color.rgb * (0.22 + 0.78 * diff) + vec3<f32>(spec + rim), 1.0);
+}`;
+
+class MeshView {
+  constructor(el, device) {
+    this.el = el; this.canvas = el.querySelector('canvas'); this.device = device; this.meshes = [];
+    this.ctx = this.canvas.getContext('webgpu');
+    this.format = navigator.gpu.getPreferredCanvasFormat();
+    this.ctx.configure({ device, format: this.format, alphaMode: 'opaque' });
+    const module = device.createShaderModule({ code: MESH_WGSL });
+    this.pipe = device.createRenderPipeline({
+      layout: 'auto',
+      vertex: { module, entryPoint: 'vs', buffers: [{ arrayStride: 24, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'float32x3' }] }] },
+      fragment: { module, entryPoint: 'fs', targets: [{ format: this.format }] },
+      primitive: { topology: 'triangle-list', cullMode: 'none' },
+      depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
+      multisample: { count: 4 },
+    });
+    this.cam = { yaw: 0, pitch: 0.08, dist: 200, target: [0, 0, 0] };
+    let drag = null;
+    this.canvas.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; this.canvas.setPointerCapture(e.pointerId); });
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      this.cam.yaw -= (e.clientX - drag.x) * 0.008; this.cam.pitch = Math.max(-1.55, Math.min(1.55, this.cam.pitch + (e.clientY - drag.y) * 0.008));
+      drag = { x: e.clientX, y: e.clientY }; this.draw();
+    });
+    this.canvas.addEventListener('pointerup', () => { drag = null; });
+    this.canvas.addEventListener('wheel', (e) => { e.preventDefault(); this.cam.dist *= Math.exp(e.deltaY * 0.001); this.draw(); }, { passive: false });
+    this.canvas.addEventListener('dblclick', () => this.setView('front'));
+    new ResizeObserver(() => this.draw()).observe(el);
+  }
+  setView(name) {
+    const v = { front: [0, 0.08], right: [-Math.PI / 2, 0.08], left: [Math.PI / 2, 0.08], top: [0, 1.55] }[name] || [0, 0.08];
+    this.cam.yaw = v[0]; this.cam.pitch = v[1]; this.cam.dist = this.radius * 2.6; this.draw();
+  }
+  clear() { for (const m of this.meshes) { m.vb.destroy(); m.ib.destroy(); m.ub.destroy(); } this.meshes = []; this.draw(); }
+  setMeshes(list) {
+    this.clear();
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const m of list) {
+      const P = m.positions, N = m.normals, nv = P.length / 3;
+      const inter = new Float32Array(nv * 6);
+      for (let i = 0; i < nv; i++) {
+        inter.set(P.subarray(3 * i, 3 * i + 3), 6 * i); inter.set(N.subarray(3 * i, 3 * i + 3), 6 * i + 3);
+        for (let d = 0; d < 3; d++) { const v = P[3 * i + d]; if (v < lo[d]) lo[d] = v; if (v > hi[d]) hi[d] = v; }
+      }
+      const vb = this.device.createBuffer({ size: inter.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+      this.device.queue.writeBuffer(vb, 0, inter);
+      const ib = this.device.createBuffer({ size: Math.ceil(m.indices.byteLength / 4) * 4, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
+      this.device.queue.writeBuffer(ib, 0, m.indices);
+      const ub = this.device.createBuffer({ size: 144, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+      const bg = this.device.createBindGroup({ layout: this.pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: ub } }] });
+      this.meshes.push({ cls: m.cls, vb, ib, ub, bg, count: m.indices.length, color: m.color, visible: true });
+    }
+    if (list.length) {
+      this.cam.target = [0, 1, 2].map((d) => (lo[d] + hi[d]) / 2);
+      this.radius = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2 || 50;
+      this.setView('front');
+    }
+  }
+  setVisible(cls, on) { for (const m of this.meshes) if (m.cls === cls) m.visible = on; this.draw(); }
+  draw() {
+    if (this.pending) return;
+    this.pending = true;
+    requestAnimationFrame(() => { this.pending = false; this.render(); });
+  }
+  render() {
+    const dpr = devicePixelRatio || 1;
+    const W = Math.max(1, Math.round(this.el.clientWidth * dpr)), H = Math.max(1, Math.round(this.el.clientHeight * dpr));
+    if (this.canvas.width !== W || this.canvas.height !== H || !this.depth) {
+      this.canvas.width = W; this.canvas.height = H;
+      this.depth?.destroy(); this.msaa?.destroy();
+      this.depth = this.device.createTexture({ size: [W, H], format: 'depth24plus', sampleCount: 4, usage: GPUTextureUsage.RENDER_ATTACHMENT });
+      this.msaa = this.device.createTexture({ size: [W, H], format: this.format, sampleCount: 4, usage: GPUTextureUsage.RENDER_ATTACHMENT });
+    }
+    const c = this.cam, cp = Math.cos(c.pitch);
+    const off = [Math.sin(c.yaw) * cp, -Math.cos(c.yaw) * cp, Math.sin(c.pitch)];
+    const eye = [0, 1, 2].map((d) => c.target[d] + off[d] * c.dist);
+    const up = Math.abs(c.pitch) > 1.5 ? [Math.sin(c.yaw), -Math.cos(c.yaw), 0] : [0, 0, 1];
+    const view = M4.lookAt(eye, c.target, up);
+    const r = this.radius || 50;
+    const proj = M4.perspective(0.6, W / H, Math.max(0.1, c.dist - r * 3), c.dist + r * 3);
+    const mvp = M4.mul(proj, view);
+    const enc = this.device.createCommandEncoder();
+    const pass = enc.beginRenderPass({
+      colorAttachments: [{ view: this.msaa.createView(), resolveTarget: this.ctx.getCurrentTexture().createView(), clearValue: { r: 0.035, g: 0.04, b: 0.047, a: 1 }, loadOp: 'clear', storeOp: 'discard' }],
+      depthStencilAttachment: { view: this.depth.createView(), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'discard' },
+    });
+    pass.setPipeline(this.pipe);
+    for (const m of this.meshes) {
+      if (!m.visible) continue;
+      const u = new Float32Array(36); u.set(mvp, 0); u.set(view, 16); u.set([m.color[0] / 255, m.color[1] / 255, m.color[2] / 255, 1], 32);
+      this.device.queue.writeBuffer(m.ub, 0, u);
+      pass.setBindGroup(0, m.bg); pass.setVertexBuffer(0, m.vb); pass.setIndexBuffer(m.ib, 'uint32'); pass.drawIndexed(m.count);
+    }
+    pass.end();
+    this.device.queue.submit([enc.finish()]);
+  }
+}
+
+// ------------------------------------------------------------- zip (store) for multi-file export
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xffffffff; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+async function makeZip(entries) {
+  const parts = [], central = []; let offset = 0;
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  for (const { name, blob } of entries) {
+    const data = new Uint8Array(await blob.arrayBuffer()); const nm = new TextEncoder().encode(name); const crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, nm.length, true);
+    parts.push(lh.buffer, nm, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+    ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true);
+    ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, nm.length, true); ch.setUint32(42, offset, true);
+    central.push(ch.buffer, nm);
+    offset += 30 + nm.length + data.length;
+  }
+  const cdSize = central.reduce((a, p) => a + p.byteLength, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, end.buffer], { type: 'application/zip' });
+}
+
+function download(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+}
+
+// ------------------------------------------------------------- self test
+// index.html?selftest=small|full|sample1  (needs the page served over http and tests/golden)
+async function selftest(mode) {
+  const log = (...a) => { console.log('[selftest]', ...a); const el = document.getElementById('selftest-log'); if (el) el.textContent += a.join(' ') + '\n'; };
+  const result = { mode };
+  try {
+    const gpu = await initGPU(); log('adapter', gpu.adapterName, 'f16', gpu.f16);
+    result.f16 = gpu.f16; result.adapter = gpu.adapterName;
+    const pkg = await loadModelPackage('dentalsegmentator'); log('model loaded');
+    const golden = await (await fetch('tests/golden/golden.json')).json();
+    if (mode === 'small' || mode === 'full') {
+      const g = golden[mode === 'small' ? 'patch_small' : 'patch_full'];
+      const name = mode === 'small' ? 'patch_small' : 'patch_full';
+      const x = new Float32Array(await (await fetch(`tests/golden/${name}.input.f32`)).arrayBuffer());
+      let ref;
+      if (g.logitsF16Parts) {
+        const parts = await Promise.all(g.logitsF16Parts.map(async (f) => new Uint16Array(await (await fetch('tests/golden/' + f)).arrayBuffer())));
+        const total = parts.reduce((a, p) => a + p.length, 0); ref = new Float32Array(total); let o = 0;
+        for (const p of parts) { for (let i = 0; i < p.length; i++) ref[o + i] = F16_TO_F32[p[i]]; o += p.length; }
+      } else ref = new Float32Array(await (await fetch(`tests/golden/${name}.logits.f32`)).arrayBuffer());
+      const eng = new UNetEngine(gpu, pkg); eng.debug = params.has('layers');
+      let t0 = performance.now(); eng.build(g.shape); log('build', ((performance.now() - t0) / 1000).toFixed(2), 's peak', fmtBytes(eng.peakBytes), 'GFLOP', (eng.totalFlops / 1e9).toFixed(1));
+      const r1 = await eng.runPatch(x); log('first run', r1.seconds.toFixed(2), 's');
+      const r = await eng.runPatch(x); log('second run', r.seconds.toFixed(2), 's');
+      const n = x.length, C = eng.NC; let maxAbs = 0, sumAbs = 0, agree = 0;
+      for (let i = 0; i < n; i++) {
+        let ba = 0, bb = 0;
+        for (let k = 0; k < C; k++) {
+          const d = Math.abs(r.logits[k * n + i] - ref[k * n + i]); maxAbs = Math.max(maxAbs, d); sumAbs += d;
+          if (r.logits[k * n + i] > r.logits[ba * n + i]) ba = k; if (ref[k * n + i] > ref[bb * n + i]) bb = k;
+        }
+        if (ba === bb) agree++;
+      }
+      Object.assign(result, { maxAbs, meanAbs: sumAbs / (n * C), argmaxAgreement: agree / n, seconds: r.seconds, gflop: eng.totalFlops / 1e9 });
+      if (params.has('layers')) {
+        const layers = await (await fetch('debug/layers.json')).json();
+        result.layers = [];
+        for (const L of layers) {
+          const t = eng.named[L.name]; if (!t) { result.layers.push({ name: L.name, missing: true }); continue; }
+          const c4 = t.c4, nv = L.shape[0] * L.shape[1] * L.shape[2];
+          const raw = await eng.readBuffer(t.mem.buf, nv * c4 * 4 * eng.actBytes);
+          const vals = eng.f16 ? new Uint16Array(raw) : new Float32Array(raw);
+          const xf = new Float32Array(await eng.readBuffer(t.xf, c4 * 2 * 16));
+          const ref = new Float32Array(await (await fetch(`debug/${L.name}.f32`)).arrayBuffer());
+          let mx = 0, sm = 0, rm = 0;
+          for (let i = 0; i < nv; i++) for (let c = 0; c < L.c; c++) {
+            let a = eng.f16 ? F16_TO_F32[vals[i * c4 * 4 + c]] : vals[i * c4 * 4 + c];
+            a = a * xf[c] + xf[c4 * 4 + c]; a = a > 0 ? a : a * t.slope;
+            const d = Math.abs(a - ref[i * c4 * 4 + c]); mx = Math.max(mx, d); sm += d; rm += Math.abs(ref[i * c4 * 4 + c]);
+          }
+          result.layers.push({ name: L.name, maxAbs: +mx.toFixed(4), meanAbs: +(sm / (nv * L.c)).toExponential(2), refMeanAbs: +(rm / (nv * L.c)).toFixed(3) });
+        }
+      }
+      eng.destroy();
+    }
+    if (mode === 'pipeline' || mode === 'sample1') {
+      // preprocessing exactness against the Python reference
+      const blob = await (await fetch('../' + golden.source)).blob();
+      const vol = await readNifti(new File([blob], 'sample1.nii.gz'));
+      const grid = processingGrid(vol, modelSpacingXYZ(pkg.manifest));
+      let t0 = performance.now();
+      const hu = await resampleToGrid(vol, grid);
+      const net = normalizeForNetwork(hu, grid, pkg.manifest);
+      result.preprocessSeconds = (performance.now() - t0) / 1000;
+      result.gridMatches = JSON.stringify(grid.size) === JSON.stringify(golden.grid.size) && JSON.stringify(net.dims) === JSON.stringify(golden.netShapeYZX);
+      let probeMax = 0; const [, H, W] = net.dims;
+      for (const p of golden.probes) probeMax = Math.max(probeMax, Math.abs(net.data[(p.yzx[0] * H + p.yzx[1]) * W + p.yzx[2]] - p.value));
+      result.probeMaxAbs = probeMax;
+      let s = 0; for (let i = 0; i < net.data.length; i++) s += net.data[i];
+      result.meanDiff = Math.abs(s / net.data.length - golden.preprocessedStats.mean);
+      log('preprocess', JSON.stringify({ grid: grid.size, net: net.dims, probeMax, sec: result.preprocessSeconds }));
+      const eng = new UNetEngine(gpu, pkg);
+      let refLabels, refInfo, input, dims;
+      if (mode === 'pipeline') {
+        refInfo = await (await fetch('debug/pipeline_ref.json')).json();
+        refLabels = new Uint8Array(await (await fetch('debug/pipeline_ref.labels.u8')).arrayBuffer());
+        const [a, b, c] = refInfo.crop0, [d, h, w] = refInfo.shape;
+        input = new Float32Array(d * h * w); dims = [d, h, w];
+        for (let i = 0; i < d; i++) for (let j = 0; j < h; j++) input.set(net.data.subarray(((a + i) * H + b + j) * W + c, ((a + i) * H + b + j) * W + c + w), (i * h + j) * w);
+        eng.build(refInfo.patch);
+      } else {
+        refLabels = new Uint8Array(await (await fetch('tests/golden/sample1.labels_zyx.u8')).arrayBuffer());
+        input = net.data; dims = net.dims;
+        eng.build(pkg.manifest.preprocessing.patchSize);
+      }
+      t0 = performance.now();
+      const seg = await eng.segment(input, dims, { onProgress: (p) => log(`patch ${p.done}/${p.total} ${p.elapsed.toFixed(1)}s`) });
+      result.segmentSeconds = (performance.now() - t0) / 1000; result.windows = seg.windows; result.steps = seg.steps;
+      const ours = mode === 'pipeline' ? seg.labels : networkToZYX(seg.labels, dims, pkg.manifest);
+      let agree = 0; const C = pkg.manifest.labels.length; const inter = new Array(C).fill(0), a1 = new Array(C).fill(0), a2 = new Array(C).fill(0);
+      for (let i = 0; i < ours.length; i++) { const x = ours[i], y = refLabels[i]; if (x === y) { agree++; inter[x]++; } a1[x]++; a2[y]++; }
+      result.voxelAgreement = agree / ours.length;
+      result.dice = inter.map((v, k) => (a1[k] + a2[k] ? +(2 * v / (a1[k] + a2[k])).toFixed(5) : null));
+      result.counts = a1; result.refCounts = a2;
+      eng.destroy();
+    }
+    log(JSON.stringify(result));
+  } catch (e) { result.error = String(e && e.stack || e); log('ERROR', result.error); }
+  window.__selftest = result;
+  return result;
+}
+
+const params = new URLSearchParams(location.search);
+if (params.has('selftest')) {
+  document.body.insertAdjacentHTML('beforeend', '<pre id="selftest-log"></pre>');
+  selftest(params.get('selftest') || 'small');
+}
+
+// ------------------------------------------------------------- application
+const APP_VERSION = '0.1.0';
+const $ = (id) => document.getElementById(id);
+const state = { gpu: null, registry: null, pkg: null, engine: null, volume: null, grid: null, hu: null, huDisplay: null,
+  result: null, meshes: null, busy: false, abort: null, dicom: null };
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function setStep(id, enabled) { $(id).classList.toggle('disabled', !enabled); }
+function setStage(id, text, isError = false) { const el = $(id); el.textContent = text || ''; el.classList.toggle('err', !!isError); }
+function errorText(e) { return e instanceof UserError ? e.message : e instanceof Cancelled ? '中止しました。' : `予期しないエラー: ${e?.message || e}`; }
+
+async function initApp() {
+  // consent (remembered in this browser)
+  let ok = false; try { ok = localStorage.getItem('ctseg-consent') === '1'; } catch (e) { /* storage unavailable */ }
+  if (!ok) {
+    $('consent').hidden = false;
+    $('consent-ok').onclick = () => { try { localStorage.setItem('ctseg-consent', '1'); } catch (e) { /* ignore */ } $('consent').hidden = true; };
+  }
+  state.views = new SliceViews($('viewer'), () => {});
+  wireOpen(); wireRun(); wireResult();
+  try {
+    state.gpu = await initGPU();
+    $('gpu-status').innerHTML = `WebGPU <b>${esc(state.gpu.adapterName || 'GPU')}</b> · ${state.gpu.f16 ? 'fp16' : 'fp32'}`;
+    state.mesh3d = new MeshView($('vp-3d'), state.gpu.device);
+  } catch (e) {
+    $('gpu-status').innerHTML = `<span class="err">${esc(errorText(e))}</span>`;
+  }
+  try {
+    state.registry = EMBEDDED?.registry ?? await fetchJSONorScript(new URL('registry.json', MODEL_ROOT));
+    const sel = $('model-select');
+    sel.innerHTML = state.registry.models.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
+    sel.onchange = () => loadModel(sel.value);
+    await loadModel(state.registry.models[0].id);
+  } catch (e) {
+    $('model-sub').innerHTML = `<span class="err">モデルを読み込めません: ${esc(e.message || e)}</span>`;
+  }
+}
+
+async function loadModel(id) {
+  $('model-sub').textContent = 'モデルを読み込み中…';
+  state.engine?.destroy(); state.engine = null; state.pkg = null; updateRunButton();
+  state.pkg = await loadModelPackage(id, (f) => { $('model-sub').textContent = `モデルを読み込み中… ${Math.round(f * 100)}%`; });
+  const m = state.pkg.manifest;
+  $('model-sub').textContent = `${m.name} · ${m.labels.length - 1} クラス`;
+  const pp = m.postprocess?.removeSmallIslands; if (pp) $('opt-islands').value = pp.minimumVoxels;
+  renderAbout(m);
+  if (state.volume) await prepareGrid();
+  updateRunButton();
+}
+
+function renderAbout(m) {
+  const a = m.attribution || {};
+  $('about').innerHTML = `
+    <p><b>${esc(m.name)}</b> ${esc(m.version || '')}<br>${esc(a.model || '')}
+    ${a.modelUrl ? `<br><a href="${esc(a.modelUrl)}" target="_blank" rel="noopener">${esc(a.modelUrl)}</a>` : ''}
+    ${a.license ? ` · <a href="${esc(a.license)}" target="_blank" rel="noopener">CC BY 4.0</a>` : ''}</p>
+    ${a.paper ? `<p>${esc(a.paper)}</p>` : ''}
+    ${a.framework ? `<p>${esc(a.framework)}</p>` : ''}
+    ${a.changes ? `<p>変更点: ${esc(a.changes)}</p>` : ''}
+    <p>${esc(a.notEndorsed || '')} 研究・教育・技術評価用です。医療機器ではなく、診断には使えません。CT と結果はブラウザ内でのみ処理され、送信されません。</p>`;
+}
+
+// ---------------------------------------------------------------- open
+function wireOpen() {
+  const drop = $('drop');
+  $('pick-folder').onclick = () => $('folder-input').click();
+  $('pick-file').onclick = () => $('file-input').click();
+  $('folder-input').onchange = (e) => { if (e.target.files.length) openFiles([...e.target.files]); e.target.value = ''; };
+  $('file-input').onchange = (e) => { if (e.target.files.length) openFiles([...e.target.files]); e.target.value = ''; };
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', async (e) => { e.preventDefault(); drop.classList.remove('over'); openFiles(await filesFromDataTransfer(e.dataTransfer)); });
+  document.addEventListener('dragover', (e) => e.preventDefault());
+  document.addEventListener('drop', (e) => e.preventDefault());
+  $('load-series').onclick = () => {
+    const key = document.querySelector('input[name=series]:checked')?.value;
+    const s = state.dicom?.series.find((x) => x.key === key);
+    if (s) loadVolume(() => loadDicomSeries(s, (f) => setStage('open-stage', `DICOM を読み込み中… ${Math.round(f * 100)}%`)));
+  };
+}
+
+async function openFiles(files) {
+  if (state.busy) return;
+  $('series-list').hidden = true; $('series-actions').hidden = true; $('vol-warn').hidden = true;
+  const nifti = files.filter((f) => /\.nii(\.gz)?$/i.test(f.name));
+  if (nifti.length === 1 && files.length === 1) return loadVolume(() => readNifti(nifti[0]));
+  const candidates = files.filter((f) => !/^\./.test(f.name) && !/\.(txt|json|xml|html?|jpe?g|png|pdf|exe|zip|ini|log|db)$/i.test(f.name));
+  try {
+    state.busy = true;
+    setStage('open-stage', `${candidates.length} ファイルを確認中…`);
+    const idx = await indexDicomFiles(candidates, (f) => setStage('open-stage', `DICOM を確認中… ${Math.round(f * 100)}%`));
+    state.dicom = idx;
+    if (!idx.series.length) throw new UserError('NO_DICOM', 'CT 画像として読める DICOM が見つかりませんでした。');
+    const list = $('series-list');
+    list.innerHTML = idx.series.map((s, i) => `<label><input type="radio" name="series" value="${esc(s.key)}" ${i === 0 ? 'checked' : ''}>
+      <span><b>${esc(s.description)}</b><br><span class="meta">${esc(s.modality)} · ${s.cols}×${s.rows}×${s.frames} · ${esc(s.tsName)}${s.supported ? '' : '（未対応の圧縮）'}</span></span></label>`).join('');
+    list.hidden = false; $('series-actions').hidden = false;
+    setStage('open-stage', `${idx.series.length} シリーズ${idx.skipped.length ? ` · ${idx.skipped.length} ファイルは画像以外として除外` : ''}`);
+    state.busy = false;
+    if (idx.series.length === 1 && idx.series[0].supported) $('load-series').click();
+  } catch (e) { state.busy = false; setStage('open-stage', errorText(e), true); }
+}
+
+async function loadVolume(reader) {
+  if (state.busy) return;
+  state.busy = true;
+  try {
+    setStage('open-stage', '読み込み中…');
+    const vol = await reader();
+    state.volume = vol; state.result = null; clearResult();
+    const info = $('vol-info');
+    const kv = [['名前', vol.name], ['形式', vol.source + (vol.info?.transferSyntax ? ` (${vol.info.transferSyntax})` : '')],
+      ['サイズ', vol.dims.join(' × ')], ['ボクセル (mm)', (vol.info?.spacing || []).join(' × ')]];
+    info.innerHTML = kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join(''); info.hidden = false;
+    const w = vol.warnings || [];
+    $('vol-warn').hidden = !w.length; $('vol-warn').textContent = w.join('\n');
+    state.busy = false;
+    await prepareGrid();
+  } catch (e) { state.busy = false; setStage('open-stage', errorText(e), true); console.error(e); }
+}
+
+// resample the source onto the model grid (also used for display)
+async function prepareGrid() {
+  if (!state.volume || !state.pkg) { updateRunButton(); return; }
+  state.busy = true; updateRunButton();
+  try {
+    const scale = parseFloat($('opt-scale').value);
+    const grid = processingGrid(state.volume, modelSpacingXYZ(state.pkg.manifest), scale);
+    setStage('open-stage', 'モデルの格子へリサンプリング中…');
+    const hu = await resampleToGrid(state.volume, grid, (f) => setStage('open-stage', `モデルの格子へリサンプリング中… ${Math.round(f * 100)}%`));
+    state.grid = grid; state.hu = hu;
+    const disp = new Int16Array(hu.length); for (let i = 0; i < hu.length; i++) { const v = Math.round(hu[i]); disp[i] = v < -32768 ? -32768 : v > 32767 ? 32767 : v; }
+    state.huDisplay = disp;
+    $('viewer-empty').hidden = true;
+    state.views.setVolume(disp, grid);
+    if (state.volume.window && $('wl-bar').querySelector('.on')?.dataset.wl === 'bone') { /* keep bone preset for dental CT */ }
+    setStage('open-stage', `処理格子 ${grid.size.join(' × ')}（${grid.spacing.map((v) => v.toFixed(3)).join(' × ')} mm）`);
+    setStep('step-run', true);
+    updateEstimate();
+  } catch (e) { setStage('open-stage', errorText(e), true); console.error(e); }
+  state.busy = false; updateRunButton();
+}
+
+function updateEstimate() {
+  if (!state.grid || !state.pkg) { $('run-estimate').textContent = ''; return; }
+  const m = state.pkg.manifest, patch = m.preprocessing.patchSize;
+  const zyx = [state.grid.size[2], state.grid.size[1], state.grid.size[0]];
+  const net = m.preprocessing.transposeForward.map((a) => zyx[a]);
+  const step = parseFloat($('opt-step').value);
+  const steps = net.map((d, i) => slidingSteps(Math.max(d, patch[i]), patch[i], step).length);
+  const n = steps[0] * steps[1] * steps[2];
+  const plane = net[1] * net[2], NC = m.network.numClasses;
+  const bytes = patch[0] * plane * (NC + 1) * 4 + net[0] * plane * 12;
+  $('run-estimate').textContent = `パッチ ${n} 個（${steps.join(' × ')}）· 作業メモリ 約 ${fmtBytes(bytes)} + ネットワーク`;
+  const lim = state.gpu?.limits?.maxBufferSize ?? Infinity;
+  state.tooLarge = patch[0] * plane * (NC + 1) * 4 > lim || net[0] * plane * 4 > lim;
+  if (state.tooLarge) $('run-estimate').textContent += ' — この GPU には大きすぎます。処理解像度を下げてください。';
+}
+
+function updateRunButton() {
+  $('run').disabled = !(state.gpu && state.pkg && state.grid && !state.busy && !state.tooLarge);
+}
+
+// ---------------------------------------------------------------- run
+function wireRun() {
+  $('run').onclick = runSegmentation;
+  $('cancel').onclick = () => state.abort?.abort();
+  $('opt-scale').onchange = () => prepareGrid();
+  $('opt-step').onchange = () => updateEstimate();
+  for (const b of $('wl-bar').querySelectorAll('button')) b.onclick = () => {
+    $('wl-bar').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    state.views.setWindow(WL_PRESETS[b.dataset.wl]);
+  };
+  for (const b of $('vp-3d').querySelectorAll('[data-view]')) b.onclick = () => state.mesh3d?.setView(b.dataset.view);
+}
+
+async function runSegmentation() {
+  if (state.busy) return;
+  state.busy = true; updateRunButton();
+  state.abort = new AbortController(); const signal = state.abort.signal;
+  $('cancel').hidden = false; clearResult();
+  const bar = $('bar'); const t0 = performance.now(); const timings = {};
+  const m = state.pkg.manifest;
+  try {
+    setStage('run-stage', '前処理（正規化）…'); bar.style.width = '2%'; await nextFrame();
+    let t = performance.now();
+    const net = normalizeForNetwork(state.hu, state.grid, m);
+    timings.normalize = (performance.now() - t) / 1000;
+    if (!state.engine) {
+      setStage('run-stage', 'GPU の準備（シェーダーと重みの転送）…'); await nextFrame();
+      t = performance.now();
+      const eng = new UNetEngine(state.gpu, state.pkg);
+      eng.build(params.get('patch') ? params.get('patch').split(',').map(Number) : m.preprocessing.patchSize); // ?patch= is a test override
+      state.engine = eng; timings.build = (performance.now() - t) / 1000;
+    }
+    t = performance.now();
+    const seg = await state.engine.segment(net.data, net.dims, {
+      signal, tileStep: parseFloat($('opt-step').value),
+      onProgress: (p) => {
+        bar.style.width = `${5 + 80 * p.done / p.total}%`;
+        setStage('run-stage', `推論 ${p.done}/${p.total} パッチ · 経過 ${fmtSec(p.elapsed)} · 残り約 ${fmtSec(p.eta)}`);
+      },
+    });
+    timings.inference = (performance.now() - t) / 1000;
+    setStage('run-stage', '後処理…'); bar.style.width = '88%'; await nextFrame();
+    t = performance.now();
+    const labels = networkToZYX(seg.labels, net.dims, m, Uint8Array);
+    const margin = networkToZYX(seg.margin, net.dims, m, Float32Array);
+    const rawCounts = labelCounts(labels, m.labels.length);
+    const pp = m.postprocess?.removeSmallIslands;
+    const minVox = parseInt($('opt-islands').value, 10) || 0;
+    const removed = pp && minVox > 0 ? await removeSmallIslands(labels, [state.grid.size[2], state.grid.size[1], state.grid.size[0]], pp.classes, minVox) : {};
+    timings.postprocess = (performance.now() - t) / 1000;
+    state.result = { labels, margin, rawCounts, counts: labelCounts(labels, m.labels.length), removed, seg, timings, minVox };
+    showLabels();
+    setStage('run-stage', '3D メッシュを作成中…'); bar.style.width = '92%'; await nextFrame();
+    t = performance.now();
+    await buildMeshes();
+    timings.meshes = (performance.now() - t) / 1000;
+    timings.total = (performance.now() - t0) / 1000;
+    bar.style.width = '100%';
+    setStage('run-stage', `完了 · ${fmtSec(timings.total)}（推論 ${fmtSec(timings.inference)}、${seg.windows} パッチ）`);
+    setStep('step-result', true);
+    for (const id of ['save-stl-all', 'save-nifti', 'save-report']) $(id).disabled = false;
+  } catch (e) {
+    bar.style.width = '0%';
+    setStage('run-stage', errorText(e), !(e instanceof Cancelled)); console.error(e);
+  }
+  $('cancel').hidden = true; state.abort = null; state.busy = false; updateRunButton();
+}
+
+function clearResult() {
+  state.result = null; state.meshes = null;
+  state.views.setLabels(null, null, null);
+  state.mesh3d?.clear();
+  $('label-table').innerHTML = ''; setStep('step-result', false);
+  for (const id of ['save-stl-all', 'save-nifti', 'save-report']) $(id).disabled = true;
+  setStage('result-stage', '');
+}
+
+function labelInfo() {
+  return state.pkg.manifest.labels.map((l) => ({ ...l, color: l.color || [200, 200, 200], title: l.ja || l.name }));
+}
+
+function showLabels() {
+  const L = labelInfo(), r = state.result, vv = state.grid.spacing[0] * state.grid.spacing[1] * state.grid.spacing[2];
+  state.visible = L.map((l) => l.value !== 0);
+  const colors = L.map((l) => l.color);
+  state.views.setLabels(r.labels, colors, state.visible);
+  $('label-table').innerHTML = L.filter((l) => l.value !== 0).map((l) => `<tr>
+    <td><label><input type="checkbox" data-cls="${l.value}" checked> <span class="sw" style="background:rgb(${l.color.join(',')})"></span>${esc(l.title)}</label></td>
+    <td class="num">${(r.counts[l.value] * vv / 1000).toFixed(1)} cm³</td>
+    <td><button class="btn small" data-stl="${l.value}" ${r.counts[l.value] ? '' : 'disabled'}>STL</button></td></tr>`).join('');
+  for (const cb of $('label-table').querySelectorAll('input[data-cls]')) cb.onchange = () => {
+    const c = +cb.dataset.cls; state.visible[c] = cb.checked; state.views.drawAll(); state.mesh3d?.setVisible(c, cb.checked);
+  };
+  for (const b of $('label-table').querySelectorAll('button[data-stl]')) b.onclick = () => saveSTL(+b.dataset.stl);
+}
+
+async function buildMeshes() {
+  const r = state.result, L = labelInfo(), dims = [state.grid.size[2], state.grid.size[1], state.grid.size[0]];
+  const iters = parseInt($('opt-smooth').value, 10) || 0, sub = $('opt-subvoxel').checked;
+  state.meshes = {};
+  const list = [];
+  for (const l of L) {
+    if (!l.value || !r.counts[l.value]) continue;
+    setStage('run-stage', `3D メッシュを作成中… ${l.title}`); await nextFrame();
+    const mesh = surfaceNets(r.labels, r.margin, dims, l.value, { subvoxel: sub });
+    if (!mesh || !mesh.indices.length) continue;
+    taubinSmooth(mesh, iters);
+    meshToPatient(mesh, state.grid);
+    mesh.normals = vertexNormals(mesh);
+    state.meshes[l.value] = mesh;
+    list.push({ cls: l.value, positions: mesh.positions, normals: mesh.normals, indices: mesh.indices, color: l.color });
+  }
+  state.mesh3d?.setMeshes(list);
+}
+
+// ---------------------------------------------------------------- export
+function wireResult() {
+  $('overlay').oninput = (e) => state.views.setAlpha(parseFloat(e.target.value));
+  $('save-stl-all').onclick = async () => {
+    const entries = [];
+    for (const [cls, mesh] of Object.entries(state.meshes || {})) entries.push({ name: stlName(+cls), blob: meshToSTL(mesh, labelName(+cls), $('coords').value) });
+    entries.push({ name: 'report.json', blob: reportBlob() });
+    download(await makeZip(entries), `${baseName()}_stl.zip`);
+  };
+  $('save-nifti').onclick = () => download(labelsToNifti(state.result.labels, state.grid), `${baseName()}_labels.nii`);
+  $('save-report').onclick = () => download(reportBlob(), `${baseName()}_report.json`);
+}
+function labelName(cls) { const l = state.pkg.manifest.labels.find((x) => x.value === cls); return l?.key || l?.name || 'label' + cls; }
+function baseName() { return (state.volume?.name || 'ct').replace(/\.nii(\.gz)?$/i, '').replace(/[^\w.-]+/g, '_').slice(0, 60) || 'ct'; }
+function stlName(cls) { return `${String(cls).padStart(2, '0')}_${labelName(cls)}_${$('coords').value}.stl`; }
+function saveSTL(cls) { const m = state.meshes?.[cls]; if (m) download(meshToSTL(m, labelName(cls), $('coords').value), `${baseName()}_${stlName(cls)}`); }
+function reportBlob() {
+  const m = state.pkg.manifest, r = state.result;
+  const rep = {
+    app: { name: 'CT Segment WebGPU', version: APP_VERSION }, createdAt: new Date().toISOString(),
+    model: { id: m.id, name: m.name, version: m.version, provenance: m.provenance, attribution: m.attribution },
+    gpu: { adapter: state.gpu.adapterName, f16: state.gpu.f16 },
+    input: { source: state.volume.source, dims: state.volume.dims, spacing: state.volume.info?.spacing, warnings: state.volume.warnings || [] },
+    grid: { coordinateSystem: 'LPS', size: state.grid.size, spacing: state.grid.spacing, origin: state.grid.origin },
+    inference: { patchSize: m.preprocessing.patchSize, steps: r.seg.steps, windows: r.seg.windows, tileStep: parseFloat($('opt-step').value),
+      gaussian: true, mirroring: false, normalization: m.preprocessing.normalization, interpolation: 'linear before clipping (browser profile)' },
+    postprocess: { removeSmallIslands: { classes: m.postprocess?.removeSmallIslands?.classes, minimumVoxels: r.minVox, removedVoxels: r.removed } },
+    labels: m.labels.map((l) => ({ value: l.value, name: l.name, rawVoxels: r.rawCounts[l.value], voxels: r.counts[l.value] })),
+    surfaces: { method: 'surface nets', subvoxel: $('opt-subvoxel').checked, taubinIterations: parseInt($('opt-smooth').value, 10) || 0, stlCoordinates: $('coords').value },
+    timingsSeconds: r.timings,
+    notice: 'Research / education use only. Not a medical device. Outputs are not validated for clinical use.',
+  };
+  return new Blob([JSON.stringify(rep, null, 1)], { type: 'application/json' });
+}
+
+if (!params.has('selftest')) initApp();
+</script>
+</body>
+</html>
